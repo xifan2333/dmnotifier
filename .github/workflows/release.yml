@@ -113,8 +113,8 @@ jobs:
         id: calc_sha
         run: |
           # Download binaries and calculate SHA256
-          curl -sL "https://github.com/xifan23332333/dmnotifier/releases/download/${GITHUB_REF#refs/tags/}/dmnotifier-linux-amd64" -o dmnotifier-linux-amd64
-          curl -sL "https://github.com/xifan23332333/dmnotifier/releases/download/${GITHUB_REF#refs/tags/}/dmnotifier-linux-arm64" -o dmnotifier-linux-arm64
+          curl -sL "https://github.com/xifan2333/dmnotifier/releases/download/${GITHUB_REF#refs/tags/}/dmnotifier-linux-amd64" -o dmnotifier-linux-amd64
+          curl -sL "https://github.com/xifan2333/dmnotifier/releases/download/${GITHUB_REF#refs/tags/}/dmnotifier-linux-arm64" -o dmnotifier-linux-arm64
           
           SHA256_X64=$(sha256sum dmnotifier-linux-amd64 | awk '{print $1}')
           SHA256_ARM64=$(sha256sum dmnotifier-linux-arm64 | awk '{print $1}')
