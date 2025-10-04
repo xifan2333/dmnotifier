@@ -33,13 +33,7 @@ type RootModel struct {
 }
 
 // NewRootModel 创建根模型
-func NewRootModel() RootModel {
-	// 加载配置
-	config, err := LoadConfig()
-	if err != nil {
-		config = GetDefaultConfig()
-	}
-
+func NewRootModel(config *AppConfig) RootModel {
 	serverConfig := popups.NewServerConfig()
 	serverConfig.SetConfig(
 		config.Server.APIAddress,
@@ -185,12 +179,6 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return tuimsg.DisconnectServiceRequestMsg{}
 				}
 			}
-
-		case "ctrl+s":
-			// 保存配置
-			return m, func() tea.Msg {
-				return tuimsg.SaveConfigRequestMsg{}
-			}
 		}
 
 	case tuimsg.StatusMsg:
@@ -215,21 +203,12 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.config.Server.APIAddress = msg.APIAddress
 		m.config.Server.APIToken = msg.APIToken
 		m.config.Server.WSAddress = msg.WSAddress
-
-		// 保存配置到文件
-		if err := SaveConfig(m.config); err != nil {
-			m.statusMessage = fmt.Sprintf("Failed to save config: %v", err)
-		} else {
-			m.statusMessage = "Server config saved"
-		}
-
-		// 关闭弹窗
-		m.serverConfig, _ = m.serverConfig.Update(tuimsg.HidePopupMsg{})
+		// 不关闭弹窗，让用户可以继续编辑或手动按 Esc 关闭
 
 	case tuimsg.UpdatePluginsConfigMsg:
 		// 更新插件配置
 		m.config.Pipeline.Plugins = msg.Plugins
-		m.statusMessage = "Plugins config updated"
+		// 不关闭弹窗，让用户可以继续编辑或手动按 Esc 关闭
 	}
 
 	// 更新子模型
@@ -284,7 +263,7 @@ func (m RootModel) View() string {
 	status := statusStyle.Width(m.width).Render(m.statusMessage)
 
 	// 帮助栏
-	help := helpStyle.Width(m.width).Render("a:Add | s:Services | c:Config | p:Plugins | r:Refresh | d:Disconnect | Ctrl+S:Save | q:Quit")
+	help := helpStyle.Width(m.width).Render("a:Add | s:Services | c:Config | p:Plugins | r:Refresh | d:Disconnect | q:Quit")
 
 	mainView := lipgloss.JoinVertical(
 		lipgloss.Left,

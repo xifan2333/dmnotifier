@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"sync"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	tuimsg "github.com/xifan2333/dmnotifier/internal/common"
@@ -27,13 +29,19 @@ func main() {
 		config = tui.GetDefaultConfig()
 	}
 
-	// 创建 TUI 模型
-	m := tui.NewRootModel()
+	// 创建 TUI 模型，传入统一的配置实例
+	m := tui.NewRootModel(config)
 
 	// 使用中间件包装模型以处理业务逻辑
-	wrappedModel := &BusinessLogicMiddleware{model: m}
+	wrappedModel := &BusinessLogicMiddleware{
+		model:  m,
+		config: config,
+	}
 
 	p := tea.NewProgram(wrappedModel, tea.WithAltScreen())
+
+	// 保存 program 引用到中间件
+	wrappedModel.program = p
 
 	// 创建业务逻辑管理器
 	businessManager = business.NewManager(p, config)
@@ -49,7 +57,11 @@ func main() {
 
 // BusinessLogicMiddleware 业务逻辑中间件
 type BusinessLogicMiddleware struct {
-	model tea.Model
+	model      tea.Model
+	config     *tui.AppConfig
+	saveTimer  *time.Timer
+	saveMutex  sync.Mutex
+	program    *tea.Program
 }
 
 func (m *BusinessLogicMiddleware) Init() tea.Cmd {
@@ -78,12 +90,16 @@ func (m *BusinessLogicMiddleware) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, func() tea.Msg {
 			return tuimsg.StatusMsg{Message: "Server config updated (restart to apply)"}
 		})
+		// 触发自动保存
+		m.scheduleSave()
 
 	case tuimsg.AddServiceRequestMsg:
 		cmds = append(cmds, businessManager.AddService(msg.Platform, msg.RID, msg.Cookie))
 
 	case tuimsg.UpdatePluginsConfigMsg:
 		businessManager.UpdatePluginsConfig(msg.Plugins)
+		// 触发自动保存
+		m.scheduleSave()
 
 	case tuimsg.ConnectSuccessMsg:
 		// 连接成功，发送后续消息
@@ -95,21 +111,6 @@ func (m *BusinessLogicMiddleware) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return tuimsg.StatusMsg{Message: fmt.Sprintf("Connected to %s/%s", msg.Service.Platform, msg.Service.RID)}
 			},
 		)
-
-	case tuimsg.SaveConfigRequestMsg:
-		if rootModel, ok := m.model.(tui.RootModel); ok {
-			config := rootModel.GetConfig()
-			if err := tui.SaveConfig(config); err != nil {
-				cmds = append(cmds, func() tea.Msg {
-					return tuimsg.ErrorMsg{Err: err}
-				})
-			} else {
-				configPath, _ := tui.GetConfigPath()
-				cmds = append(cmds, func() tea.Msg {
-					return tuimsg.StatusMsg{Message: fmt.Sprintf("Config saved to %s", configPath)}
-				})
-			}
-		}
 	}
 
 	// 传递给实际的模型
@@ -124,4 +125,24 @@ func (m *BusinessLogicMiddleware) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *BusinessLogicMiddleware) View() string {
 	return m.model.View()
+}
+
+// scheduleSave 调度配置保存（带防抖）
+func (m *BusinessLogicMiddleware) scheduleSave() {
+	m.saveMutex.Lock()
+	defer m.saveMutex.Unlock()
+
+	// 如果已有定时器，停止它
+	if m.saveTimer != nil {
+		m.saveTimer.Stop()
+	}
+
+	// 创建新的定时器，500ms 后执行保存
+	m.saveTimer = time.AfterFunc(500*time.Millisecond, func() {
+		if err := tui.SaveConfig(m.config); err != nil {
+			m.program.Send(tuimsg.ErrorMsg{Err: fmt.Errorf("failed to auto-save config: %w", err)})
+		} else {
+			m.program.Send(tuimsg.StatusMsg{Message: "Config auto-saved"})
+		}
+	})
 }

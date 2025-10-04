@@ -73,8 +73,13 @@ func (m ServerConfigModel) Update(msg tea.Msg) (ServerConfigModel, tea.Cmd) {
 
 			case "enter":
 				m.inputs[m.focusedIndex].StopEdit()
+				// 自动触发配置保存
 				return m, func() tea.Msg {
-					return tuimsg.StatusMsg{Message: "Value saved"}
+					return tuimsg.UpdateServerConfigMsg{
+						APIAddress: m.inputs[0].Value(),
+						APIToken:   m.inputs[1].Value(),
+						WSAddress:  m.inputs[2].Value(),
+					}
 				}
 
 			default:
@@ -102,15 +107,6 @@ func (m ServerConfigModel) Update(msg tea.Msg) (ServerConfigModel, tea.Cmd) {
 
 		case "enter":
 			m.inputs[m.focusedIndex].StartEdit()
-
-		case "ctrl+s":
-			return m, func() tea.Msg {
-				return tuimsg.UpdateServerConfigMsg{
-					APIAddress: m.inputs[0].Value(),
-					APIToken:   m.inputs[1].Value(),
-					WSAddress:  m.inputs[2].Value(),
-				}
-			}
 		}
 	}
 
@@ -150,7 +146,7 @@ func (m ServerConfigModel) View() string {
 		content += input.View() + "\n"
 	}
 
-	help := dimStyle.Render("Up/Down: Navigate | Enter: Edit | Ctrl+S: Save | Esc: Cancel/Close")
+	help := dimStyle.Render("Up/Down: Navigate | Enter: Edit/Save | Esc: Cancel/Close")
 
 	body := lipgloss.JoinVertical(
 		lipgloss.Left,
