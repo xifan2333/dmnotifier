@@ -215,7 +215,13 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.config.Server.APIAddress = msg.APIAddress
 		m.config.Server.APIToken = msg.APIToken
 		m.config.Server.WSAddress = msg.WSAddress
-		m.statusMessage = "Server config updated"
+
+		// 保存配置到文件
+		if err := SaveConfig(m.config); err != nil {
+			m.statusMessage = fmt.Sprintf("Failed to save config: %v", err)
+		} else {
+			m.statusMessage = "Server config saved"
+		}
 
 		// 关闭弹窗
 		m.serverConfig, _ = m.serverConfig.Update(tuimsg.HidePopupMsg{})
