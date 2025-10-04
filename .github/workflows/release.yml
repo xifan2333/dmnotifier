@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Get version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Build binaries
+        run: |
+          # Linux amd64
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dmnotifier-linux-amd64 ./cmd/dmnotifier-tui
+
+          # Linux arm64
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o dmnotifier-linux-arm64 ./cmd/dmnotifier-tui
+
+          # macOS amd64
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o dmnotifier-darwin-amd64 ./cmd/dmnotifier-tui
+
+          # macOS arm64 (Apple Silicon)
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o dmnotifier-darwin-arm64 ./cmd/dmnotifier-tui
+
+          # Windows amd64
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dmnotifier-windows-amd64.exe ./cmd/dmnotifier-tui
+
+      - name: Create checksums
+        run: |
+          sha256sum dmnotifier-* > checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dmnotifier-linux-amd64
+            dmnotifier-linux-arm64
+            dmnotifier-darwin-amd64
+            dmnotifier-darwin-arm64
+            dmnotifier-windows-amd64.exe
+            checksums.txt
+          body: |
+            ## DMNotifier ${{ steps.get_version.outputs.VERSION }}
+
+            ### 下载说明
+
+            请根据您的操作系统下载对应的二进制文件：
+
+            - **Linux (x86_64)**: `dmnotifier-linux-amd64`
+            - **Linux (ARM64)**: `dmnotifier-linux-arm64`
+            - **macOS (Intel)**: `dmnotifier-darwin-amd64`
+            - **macOS (Apple Silicon)**: `dmnotifier-darwin-arm64`
+            - **Windows (x86_64)**: `dmnotifier-windows-amd64.exe`
+
+            ### 使用方法
+
+            1. 下载对应平台的二进制文件
+            2. Linux/macOS 需要添加执行权限：`chmod +x dmnotifier-*`
+            3. 运行：`./dmnotifier-*` 或 `dmnotifier-windows-amd64.exe`
+
+            ### 校验文件
+
+            使用 `checksums.txt` 验证文件完整性：
+            ```bash
+            sha256sum -c checksums.txt
+            ```
+
+            ### 更新日志
+
+            查看 commit 历史了解详细更新内容。
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

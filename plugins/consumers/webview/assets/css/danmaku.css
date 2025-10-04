@@ -1,0 +1,251 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #0f0f0f;
+    font-family: "YouTube Noto", Roboto, Arial, "Microsoft YaHei", sans-serif;
+    font-size: 13px;
+    overflow: hidden;
+    height: 100vh;
+}
+
+/* 主容器 */
+yt-live-chat-renderer {
+    display: block;
+    height: 100vh;
+    overflow: hidden;
+    background: #0f0f0f;
+}
+
+yt-live-chat-item-list-renderer {
+    display: block;
+    height: 100%;
+    overflow: hidden;
+}
+
+#item-scroller {
+    height: 100%;
+    overflow-x: hidden;
+    overflow-y: scroll;
+    padding: 4px 0;
+}
+
+/* 滚动条样式 */
+#item-scroller::-webkit-scrollbar {
+    width: 11px;
+}
+
+#item-scroller::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#item-scroller::-webkit-scrollbar-thumb {
+    background: rgba(136, 136, 136, 0.4);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+#item-scroller::-webkit-scrollbar-thumb:hover {
+    background: rgba(136, 136, 136, 0.6);
+    background-clip: padding-box;
+}
+
+#items {
+    padding: 0;
+}
+
+/* 消息项 */
+yt-live-chat-text-message-renderer {
+    display: flex;
+    align-items: flex-start;
+    padding: 4px 24px;
+    font-size: 13px;
+    line-height: 18px;
+    overflow: hidden;
+}
+
+yt-live-chat-text-message-renderer:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* 头像 */
+#author-photo {
+    margin-right: 16px;
+    flex: none;
+}
+
+yt-img-shadow {
+    display: block;
+    position: relative;
+}
+
+yt-img-shadow img {
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+}
+
+/* 内容区域 */
+#content {
+    flex: 1;
+    overflow: visible;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    min-width: 0;
+}
+
+/* 时间戳 */
+#timestamp {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 11px;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+/* 作者信息 */
+yt-live-chat-author-chip {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+#author-name {
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: 500;
+    font-size: 13px;
+    line-height: 18px;
+}
+
+#chip-badges {
+    display: inline-block;
+}
+
+#chat-badges {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 4px;
+}
+
+yt-live-chat-author-badge-renderer {
+    display: inline-block;
+    margin: 0 2px;
+}
+
+yt-live-chat-author-badge-renderer #image {
+    width: 16px;
+    height: 16px;
+    display: inline-block;
+}
+
+/* 消息内容 */
+#message {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 13px;
+    line-height: 18px;
+    word-wrap: break-word;
+    word-break: break-word;
+    flex: 1;
+    min-width: 0;
+}
+
+#message > span {
+    display: inline;
+}
+
+/* 超级聊天样式 */
+yt-live-chat-paid-message-renderer {
+    display: flex;
+    padding: 8px 24px;
+    margin: 4px 0;
+    border-radius: 4px;
+    animation: slideIn 0.3s ease-out;
+}
+
+yt-live-chat-paid-message-renderer[funding-level="1"] {
+    background-color: rgba(30, 136, 229, 0.2);
+    border: 1px solid rgba(30, 136, 229, 0.4);
+}
+
+yt-live-chat-paid-message-renderer[funding-level="2"] {
+    background-color: rgba(0, 229, 255, 0.2);
+    border: 1px solid rgba(0, 229, 255, 0.4);
+}
+
+yt-live-chat-paid-message-renderer[funding-level="3"] {
+    background-color: rgba(29, 233, 182, 0.2);
+    border: 1px solid rgba(29, 233, 182, 0.4);
+}
+
+yt-live-chat-paid-message-renderer[funding-level="4"] {
+    background-color: rgba(255, 202, 40, 0.3);
+    border: 1px solid rgba(255, 202, 40, 0.5);
+}
+
+yt-live-chat-paid-message-renderer[funding-level="5"] {
+    background-color: rgba(245, 124, 0, 0.3);
+    border: 1px solid rgba(245, 124, 0, 0.5);
+}
+
+yt-live-chat-paid-message-renderer[funding-level="6"] {
+    background-color: rgba(233, 30, 99, 0.3);
+    border: 1px solid rgba(233, 30, 99, 0.5);
+}
+
+yt-live-chat-paid-message-renderer[funding-level="7"] {
+    background-color: rgba(230, 33, 23, 0.4);
+    border: 1px solid rgba(230, 33, 23, 0.6);
+}
+
+/* 礼物消息样式 */
+yt-live-chat-text-message-renderer[is-gift] {
+    background-color: rgba(255, 105, 180, 0.1);
+}
+
+yt-live-chat-text-message-renderer[is-gift] #author-name {
+    color: rgba(255, 182, 193, 1);
+}
+
+/* 订阅消息样式 */
+yt-live-chat-text-message-renderer[is-subscribe] {
+    background-color: rgba(0, 255, 0, 0.1);
+}
+
+yt-live-chat-text-message-renderer[is-subscribe] #author-name {
+    color: rgba(144, 238, 144, 1);
+}
+
+/* 价格标签 */
+.price-badge {
+    display: inline-block;
+    background: linear-gradient(to right, rgba(230, 33, 23, 0.8), rgba(245, 124, 0, 0.8));
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 2px;
+    margin-left: 8px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* 动画 */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* 消息进入动画 */
+yt-live-chat-text-message-renderer,
+yt-live-chat-paid-message-renderer {
+    animation: slideIn 0.2s ease-out;
+}
