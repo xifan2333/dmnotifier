@@ -18,12 +18,12 @@
 
 ### 从 Release 下载
 
-访问 [Releases](https://github.com/xifan/dmnotifier/releases) 页面下载适合您平台的预编译二进制文件。
+访问 [Releases](https://github.com/xifan23332333/dmnotifier/releases) 页面下载适合您平台的预编译二进制文件。
 
 ### 从源码编译
 
 ```bash
-git clone https://github.com/xifan/dmnotifier.git
+git clone https://github.com/xifan23332333/dmnotifier.git
 cd dmnotifier
 go build -o dmnotifier ./cmd/dmnotifier-tui
 ```
@@ -54,9 +54,9 @@ go build -o dmnotifier ./cmd/dmnotifier-tui
 ```json
 {
   "server": {
-    "api_address": "https://danmu.xifan.fun",
+    "api_address": "https://danmu.xifan2333.fun",
     "api_token": "your-token",
-    "ws_address": "ws://danmu.xifan.fun:7777"
+    "ws_address": "ws://danmu.xifan2333.fun:7777"
   },
   "pipeline": {
     "plugins": [
@@ -174,8 +174,8 @@ package myplugin
 
 import (
     "context"
-    "github.com/xifan/dmnotifier/internal/plugin"
-    "github.com/xifan/dmnotifier/pkg/models"
+    "github.com/xifan23332333/dmnotifier/internal/plugin"
+    "github.com/xifan23332333/dmnotifier/pkg/models"
 )
 
 type Consumer struct {

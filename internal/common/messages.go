@@ -1,6 +1,6 @@
 package common
 
-import "github.com/xifan/dmnotifier/pkg/api"
+import "github.com/xifan2333/dmnotifier/pkg/api"
 
 // PluginConfig 插件配置
 type PluginConfig struct {

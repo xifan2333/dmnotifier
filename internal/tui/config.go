@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	tuimsg "github.com/xifan/dmnotifier/internal/common"
-	"github.com/xifan/dmnotifier/internal/plugin"
+	tuimsg "github.com/xifan2333/dmnotifier/internal/common"
+	"github.com/xifan2333/dmnotifier/internal/plugin"
 	"gopkg.in/yaml.v3"
 )
 
@@ -123,9 +123,9 @@ func SaveConfig(config *AppConfig) error {
 func GetDefaultConfig() *AppConfig {
 	return &AppConfig{
 		Server: ServerConfig{
-			APIAddress: "https://danmu.xifan.fun",
+			APIAddress: "https://danmu.xifan2333.fun",
 			APIToken:   "Zhi-583379",
-			WSAddress:  "ws://danmu.xifan.fun:7777",
+			WSAddress:  "ws://danmu.xifan2333.fun:7777",
 		},
 		Client: ClientConfig{
 			LogLevel: "INFO",

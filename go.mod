@@ -1,4 +1,4 @@
-module github.com/xifan/dmnotifier
+module github.com/xifan2333/dmnotifier
 
 go 1.25.1
 

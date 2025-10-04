@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/gen2brain/beeep"
-	"github.com/xifan/dmnotifier/internal/plugin"
-	"github.com/xifan/dmnotifier/pkg/models"
+	"github.com/xifan2333/dmnotifier/internal/plugin"
+	"github.com/xifan2333/dmnotifier/pkg/models"
 )
 
 // Consumer 系统通知消费者

@@ -5,10 +5,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	tuimsg "github.com/xifan/dmnotifier/internal/common"
-	"github.com/xifan/dmnotifier/internal/tui/components"
-	"github.com/xifan/dmnotifier/internal/tui/popups"
-	"github.com/xifan/dmnotifier/pkg/api"
+	tuimsg "github.com/xifan2333/dmnotifier/internal/common"
+	"github.com/xifan2333/dmnotifier/internal/tui/components"
+	"github.com/xifan2333/dmnotifier/internal/tui/popups"
+	"github.com/xifan2333/dmnotifier/pkg/api"
 )
 
 // RootModel 根模型，协调所有子模型

@@ -8,8 +8,8 @@ import (
 	"runtime"
 
 	"github.com/lib-x/edgetts"
-	"github.com/xifan/dmnotifier/internal/plugin"
-	"github.com/xifan/dmnotifier/pkg/models"
+	"github.com/xifan2333/dmnotifier/internal/plugin"
+	"github.com/xifan2333/dmnotifier/pkg/models"
 )
 
 // audioItem 音频播放项

@@ -11,8 +11,8 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
-	"github.com/xifan/dmnotifier/internal/plugin"
-	"github.com/xifan/dmnotifier/pkg/models"
+	"github.com/xifan2333/dmnotifier/internal/plugin"
+	"github.com/xifan2333/dmnotifier/pkg/models"
 )
 
 //go:embed assets/*

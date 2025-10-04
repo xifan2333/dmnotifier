@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/xifan/dmnotifier/pkg/models"
+	"github.com/xifan2333/dmnotifier/pkg/models"
 )
 
 // Manager 管道管理器

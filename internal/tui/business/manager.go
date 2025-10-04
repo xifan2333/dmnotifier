@@ -5,13 +5,13 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/xifan/dmnotifier/internal/client"
-	tuimsg "github.com/xifan/dmnotifier/internal/common"
-	"github.com/xifan/dmnotifier/internal/pipeline"
-	"github.com/xifan/dmnotifier/internal/tui"
-	"github.com/xifan/dmnotifier/internal/tui/components"
-	"github.com/xifan/dmnotifier/pkg/api"
-	"github.com/xifan/dmnotifier/pkg/models"
+	"github.com/xifan2333/dmnotifier/internal/client"
+	tuimsg "github.com/xifan2333/dmnotifier/internal/common"
+	"github.com/xifan2333/dmnotifier/internal/pipeline"
+	"github.com/xifan2333/dmnotifier/internal/tui"
+	"github.com/xifan2333/dmnotifier/internal/tui/components"
+	"github.com/xifan2333/dmnotifier/pkg/api"
+	"github.com/xifan2333/dmnotifier/pkg/models"
 )
 
 // Manager 业务逻辑管理器

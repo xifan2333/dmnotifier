@@ -5,10 +5,10 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/xifan/dmnotifier/internal/pipeline"
-	"github.com/xifan/dmnotifier/internal/plugin"
-	tuimsg "github.com/xifan/dmnotifier/internal/common"
-	"github.com/xifan/dmnotifier/internal/tui"
+	tuimsg "github.com/xifan2333/dmnotifier/internal/common"
+	"github.com/xifan2333/dmnotifier/internal/pipeline"
+	"github.com/xifan2333/dmnotifier/internal/plugin"
+	"github.com/xifan2333/dmnotifier/internal/tui"
 )
 
 // BuildPipelines 根据配置构建所有 pipeline

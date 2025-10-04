@@ -3,8 +3,8 @@ package message_type
 import (
 	"context"
 
-	"github.com/xifan/dmnotifier/internal/plugin"
-	"github.com/xifan/dmnotifier/pkg/models"
+	"github.com/xifan2333/dmnotifier/internal/plugin"
+	"github.com/xifan2333/dmnotifier/pkg/models"
 )
 
 // Filter 消息类型过滤器

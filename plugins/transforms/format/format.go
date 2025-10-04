@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/xifan/dmnotifier/internal/plugin"
-	"github.com/xifan/dmnotifier/pkg/models"
+	"github.com/xifan2333/dmnotifier/internal/plugin"
+	"github.com/xifan2333/dmnotifier/pkg/models"
 )
 
 // 平台图标映射（使用 simple-icons）

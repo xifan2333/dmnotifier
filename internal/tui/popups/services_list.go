@@ -5,8 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	tuimsg "github.com/xifan/dmnotifier/internal/common"
-	"github.com/xifan/dmnotifier/pkg/api"
+	tuimsg "github.com/xifan2333/dmnotifier/internal/common"
+	"github.com/xifan2333/dmnotifier/pkg/api"
 )
 
 type ServicesPopupModel struct {

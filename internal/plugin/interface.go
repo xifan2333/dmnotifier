@@ -3,7 +3,7 @@ package plugin
 import (
 	"context"
 
-	"github.com/xifan/dmnotifier/pkg/models"
+	"github.com/xifan2333/dmnotifier/pkg/models"
 )
 
 // PluginType 插件类型
