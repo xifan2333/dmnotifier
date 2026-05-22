@@ -23,6 +23,37 @@ type Manager struct {
 	config          *tui.AppConfig
 }
 
+const maxHistorySize = 50
+
+// addToHistory 添加到历史记录（去重，最新置顶，限长）
+func (m *Manager) addToHistory(platform, rid, cookie string) {
+	entry := tuimsg.ServiceHistoryEntry{Platform: platform, RID: rid, Cookie: cookie}
+	filtered := make([]tuimsg.ServiceHistoryEntry, 0, len(m.config.History)+1)
+	filtered = append(filtered, entry)
+	for _, h := range m.config.History {
+		if h.Platform == platform && h.RID == rid {
+			continue
+		}
+		filtered = append(filtered, h)
+	}
+	if len(filtered) > maxHistorySize {
+		filtered = filtered[:maxHistorySize]
+	}
+	m.config.History = filtered
+}
+
+// removeFromHistory 从历史记录中移除
+func (m *Manager) removeFromHistory(platform, rid string) {
+	filtered := make([]tuimsg.ServiceHistoryEntry, 0, len(m.config.History))
+	for _, h := range m.config.History {
+		if h.Platform == platform && h.RID == rid {
+			continue
+		}
+		filtered = append(filtered, h)
+	}
+	m.config.History = filtered
+}
+
 // NewManager 创建业务逻辑管理器
 func NewManager(program *tea.Program, config *tui.AppConfig) *Manager {
 	apiClient := api.NewClient(config.Server.APIAddress, config.Server.APIToken)
@@ -63,7 +94,7 @@ func (m *Manager) FetchServices() tea.Cmd {
 		if err != nil {
 			return tuimsg.ErrorMsg{Err: err}
 		}
-		return tuimsg.ServicesLoadedMsg{Services: services}
+		return tuimsg.ServicesLoadedMsg{Services: services, History: m.config.History}
 	}
 }
 
@@ -79,7 +110,7 @@ func (m *Manager) StopService(platform, rid string) tea.Cmd {
 		if err != nil {
 			return tuimsg.ErrorMsg{Err: err}
 		}
-		return tuimsg.ServicesLoadedMsg{Services: services}
+		return tuimsg.ServicesLoadedMsg{Services: services, History: m.config.History}
 	}
 }
 
@@ -90,13 +121,50 @@ func (m *Manager) AddService(platform, rid, cookie string) tea.Cmd {
 		if err != nil {
 			return tuimsg.ErrorMsg{Err: err}
 		}
+		// 加入历史记录并请求保存
+		m.addToHistory(platform, rid, cookie)
+		m.program.Send(tuimsg.SaveConfigRequestMsg{})
 		// 刷新服务列表
 		services, err := m.apiClient.GetAllServices()
 		if err != nil {
 			return tuimsg.ErrorMsg{Err: err}
 		}
 		m.program.Send(tuimsg.StatusMsg{Message: fmt.Sprintf("Service %s/%s added", platform, rid)})
-		return tuimsg.ServicesLoadedMsg{Services: services}
+		return tuimsg.ServicesLoadedMsg{Services: services, History: m.config.History}
+	}
+}
+
+// ReuseHistory 从历史记录重新添加服务并连接
+func (m *Manager) ReuseHistory(platform, rid, cookie string) tea.Cmd {
+	return func() tea.Msg {
+		_, err := m.apiClient.StartService(platform, rid, cookie)
+		if err != nil {
+			return tuimsg.ErrorMsg{Err: err}
+		}
+		// 更新历史（移到最前）并请求保存
+		m.addToHistory(platform, rid, cookie)
+		m.program.Send(tuimsg.SaveConfigRequestMsg{})
+		// 刷新列表 + 自动连接
+		services, _ := m.apiClient.GetAllServices()
+		m.program.Send(tuimsg.ServicesLoadedMsg{Services: services, History: m.config.History})
+		svc := &api.Service{Platform: platform, RID: rid}
+		m.program.Send(tuimsg.ConnectServiceRequestMsg{Service: svc})
+		return tuimsg.StatusMsg{Message: fmt.Sprintf("Reusing %s/%s from history...", platform, rid)}
+	}
+}
+
+// DeleteFromHistory 从历史记录删除一条
+func (m *Manager) DeleteFromHistory(platform, rid string) tea.Cmd {
+	return func() tea.Msg {
+		m.removeFromHistory(platform, rid)
+		m.program.Send(tuimsg.SaveConfigRequestMsg{})
+		// 刷新列表（不调后端，直接复用当前服务列表也可以，但这里走一次刷新更稳妥）
+		services, err := m.apiClient.GetAllServices()
+		if err != nil {
+			// 即使后端不可达，本地历史也已删，返回空服务列表 + 新历史
+			return tuimsg.ServicesLoadedMsg{Services: nil, History: m.config.History}
+		}
+		return tuimsg.ServicesLoadedMsg{Services: services, History: m.config.History}
 	}
 }
 

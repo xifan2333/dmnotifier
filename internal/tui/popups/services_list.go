@@ -12,6 +12,7 @@ import (
 type ServicesPopupModel struct {
 	visible  bool
 	services []api.Service
+	history  []tuimsg.ServiceHistoryEntry
 	cursor   int
 	width    int
 	height   int
@@ -21,12 +22,28 @@ func NewServicesPopup() ServicesPopupModel {
 	return ServicesPopupModel{
 		visible:  false,
 		services: []api.Service{},
+		history:  []tuimsg.ServiceHistoryEntry{},
 		cursor:   0,
 	}
 }
 
 func (m ServicesPopupModel) Init() tea.Cmd {
 	return nil
+}
+
+// totalItems 返回合并后的条目数（运行中 + 历史）
+func (m ServicesPopupModel) totalItems() int {
+	return len(m.services) + len(m.history)
+}
+
+// isHistoryCursor 当前光标是否落在历史区
+func (m ServicesPopupModel) isHistoryCursor() bool {
+	return m.cursor >= len(m.services)
+}
+
+// historyIndex 历史区中的索引（仅在 isHistoryCursor() 为 true 时有效）
+func (m ServicesPopupModel) historyIndex() int {
+	return m.cursor - len(m.services)
 }
 
 func (m ServicesPopupModel) Update(msg tea.Msg) (ServicesPopupModel, tea.Cmd) {
@@ -41,7 +58,8 @@ func (m ServicesPopupModel) Update(msg tea.Msg) (ServicesPopupModel, tea.Cmd) {
 
 	case tuimsg.ServicesLoadedMsg:
 		m.services = msg.Services
-		if m.cursor >= len(m.services) {
+		m.history = msg.History
+		if m.cursor >= m.totalItems() {
 			m.cursor = 0
 		}
 		return m, nil
@@ -56,6 +74,8 @@ func (m ServicesPopupModel) Update(msg tea.Msg) (ServicesPopupModel, tea.Cmd) {
 			return m, nil
 		}
 
+		total := m.totalItems()
+
 		switch msg.String() {
 		case "up", "k":
 			if m.cursor > 0 {
@@ -63,26 +83,48 @@ func (m ServicesPopupModel) Update(msg tea.Msg) (ServicesPopupModel, tea.Cmd) {
 			}
 
 		case "down", "j":
-			if m.cursor < len(m.services)-1 {
+			if m.cursor < total-1 {
 				m.cursor++
 			}
 
 		case "enter":
-			if len(m.services) > 0 && m.cursor < len(m.services) {
-				service := m.services[m.cursor]
+			if total == 0 {
+				return m, nil
+			}
+			if m.isHistoryCursor() {
+				entry := m.history[m.historyIndex()]
 				m.visible = false
 				return m, func() tea.Msg {
-					return tuimsg.ConnectServiceRequestMsg{Service: &service}
+					return tuimsg.ReuseHistoryRequestMsg{
+						Platform: entry.Platform,
+						RID:      entry.RID,
+						Cookie:   entry.Cookie,
+					}
 				}
+			}
+			service := m.services[m.cursor]
+			m.visible = false
+			return m, func() tea.Msg {
+				return tuimsg.ConnectServiceRequestMsg{Service: &service}
 			}
 
 		case "x", "delete":
-			if len(m.services) > 0 && m.cursor < len(m.services) {
-				service := m.services[m.cursor]
-				m.visible = false
+			if total == 0 {
+				return m, nil
+			}
+			if m.isHistoryCursor() {
+				entry := m.history[m.historyIndex()]
 				return m, func() tea.Msg {
-					return tuimsg.StopServiceRequestMsg{Platform: service.Platform, RID: service.RID}
+					return tuimsg.DeleteHistoryEntryRequestMsg{
+						Platform: entry.Platform,
+						RID:      entry.RID,
+					}
 				}
+			}
+			service := m.services[m.cursor]
+			m.visible = false
+			return m, func() tea.Msg {
+				return tuimsg.StopServiceRequestMsg{Platform: service.Platform, RID: service.RID}
 			}
 		}
 	}
@@ -103,6 +145,8 @@ func (m ServicesPopupModel) View() string {
 	primaryColor := lipgloss.Color("#7D56F4")
 	dimColor := lipgloss.Color("#666666")
 	foregroundColor := lipgloss.Color("#FFFFFF")
+	runningTagColor := lipgloss.Color("#10B981")
+	historyTagColor := lipgloss.Color("#F59E0B")
 
 	popupStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -113,6 +157,10 @@ func (m ServicesPopupModel) View() string {
 		Bold(true).
 		Foreground(primaryColor).
 		Padding(0, 1)
+
+	sectionStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(dimColor)
 
 	selectedStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -126,26 +174,54 @@ func (m ServicesPopupModel) View() string {
 	dimStyle := lipgloss.NewStyle().
 		Foreground(dimColor)
 
+	runningTag := lipgloss.NewStyle().Foreground(runningTagColor).Bold(true).Render("[RUN]")
+	historyTag := lipgloss.NewStyle().Foreground(historyTagColor).Bold(true).Render("[HIST]")
+
 	header := headerStyle.Width(width - 4).Render("Services")
 
 	content := ""
-	if len(m.services) == 0 {
-		content = dimStyle.Render("No services running")
+	if m.totalItems() == 0 {
+		content = dimStyle.Render("No services and no history")
 	} else {
-		for i, svc := range m.services {
-			cursor := " "
-			itemStyle := normalStyle
-			if m.cursor == i {
-				cursor = ">"
-				itemStyle = selectedStyle
+		if len(m.services) > 0 {
+			content += sectionStyle.Render("Running") + "\n"
+			for i, svc := range m.services {
+				cursor := " "
+				itemStyle := normalStyle
+				if m.cursor == i {
+					cursor = ">"
+					itemStyle = selectedStyle
+				}
+				line := fmt.Sprintf("%s %s %s/%s", cursor, runningTag, svc.Platform, svc.RID)
+				content += itemStyle.Render(line) + "\n"
 			}
-
-			line := fmt.Sprintf("%s %s/%s", cursor, svc.Platform, svc.RID)
-			content += itemStyle.Render(line) + "\n"
+		}
+		if len(m.history) > 0 {
+			if len(m.services) > 0 {
+				content += "\n"
+			}
+			content += sectionStyle.Render("History") + "\n"
+			for i, h := range m.history {
+				globalIdx := len(m.services) + i
+				cursor := " "
+				itemStyle := normalStyle
+				if m.cursor == globalIdx {
+					cursor = ">"
+					itemStyle = selectedStyle
+				}
+				line := fmt.Sprintf("%s %s %s/%s", cursor, historyTag, h.Platform, h.RID)
+				content += itemStyle.Render(line) + "\n"
+			}
 		}
 	}
 
-	help := dimStyle.Render("Up/Down: Select | Enter: Connect | x: Remove | Esc: Close")
+	var helpText string
+	if m.isHistoryCursor() && len(m.history) > 0 {
+		helpText = "Up/Down: Select | Enter: Reconnect | x: Remove from history | Esc: Close"
+	} else {
+		helpText = "Up/Down: Select | Enter: Connect | x: Stop | Esc: Close"
+	}
+	help := dimStyle.Render(helpText)
 
 	body := lipgloss.JoinVertical(
 		lipgloss.Left,

@@ -15,9 +15,10 @@ var availableMessageTypes = []string{"Chat", "Gift", "Like", "EnterRoom", "Subsc
 
 // AppConfig 应用配置
 type AppConfig struct {
-	Server   ServerConfig   `yaml:"server"`
-	Client   ClientConfig   `yaml:"client"`
-	Pipeline PipelineConfig `yaml:"pipeline"`
+	Server   ServerConfig                 `yaml:"server"`
+	Client   ClientConfig                 `yaml:"client"`
+	Pipeline PipelineConfig               `yaml:"pipeline"`
+	History  []tuimsg.ServiceHistoryEntry `yaml:"history,omitempty"`
 }
 
 // ServerConfig 服务器配置

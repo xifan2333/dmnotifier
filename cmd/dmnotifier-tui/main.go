@@ -96,6 +96,15 @@ func (m *BusinessLogicMiddleware) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tuimsg.AddServiceRequestMsg:
 		cmds = append(cmds, businessManager.AddService(msg.Platform, msg.RID, msg.Cookie))
 
+	case tuimsg.ReuseHistoryRequestMsg:
+		cmds = append(cmds, businessManager.ReuseHistory(msg.Platform, msg.RID, msg.Cookie))
+
+	case tuimsg.DeleteHistoryEntryRequestMsg:
+		cmds = append(cmds, businessManager.DeleteFromHistory(msg.Platform, msg.RID))
+
+	case tuimsg.SaveConfigRequestMsg:
+		m.scheduleSave()
+
 	case tuimsg.UpdatePluginsConfigMsg:
 		businessManager.UpdatePluginsConfig(msg.Plugins)
 		// 触发自动保存

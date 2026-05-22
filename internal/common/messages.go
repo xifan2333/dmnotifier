@@ -19,9 +19,17 @@ type ShowPluginsConfigPopupMsg struct {
 type ShowAddServicePopupMsg struct{}
 type HidePopupMsg struct{}
 
+// ServiceHistoryEntry 历史使用过的服务记录
+type ServiceHistoryEntry struct {
+	Platform string `yaml:"platform"`
+	RID      string `yaml:"rid"`
+	Cookie   string `yaml:"cookie,omitempty"`
+}
+
 // 数据消息类型
 type ServicesLoadedMsg struct {
 	Services []api.Service
+	History  []ServiceHistoryEntry
 }
 
 type ServiceConnectedMsg struct {
@@ -66,6 +74,19 @@ type AddServiceRequestMsg struct {
 	Platform string
 	RID      string
 	Cookie   string
+}
+
+// ReuseHistoryRequestMsg 从历史记录重新启用并连接
+type ReuseHistoryRequestMsg struct {
+	Platform string
+	RID      string
+	Cookie   string
+}
+
+// DeleteHistoryEntryRequestMsg 从历史记录中删除一条
+type DeleteHistoryEntryRequestMsg struct {
+	Platform string
+	RID      string
 }
 
 // 状态消息类型
