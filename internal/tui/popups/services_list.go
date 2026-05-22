@@ -145,8 +145,8 @@ func (m ServicesPopupModel) View() string {
 	primaryColor := lipgloss.Color("#7D56F4")
 	dimColor := lipgloss.Color("#666666")
 	foregroundColor := lipgloss.Color("#FFFFFF")
-	runningTagColor := lipgloss.Color("#10B981")
-	historyTagColor := lipgloss.Color("#F59E0B")
+	runningSectionColor := lipgloss.Color("#10B981")
+	historySectionColor := lipgloss.Color("#F59E0B")
 
 	popupStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -158,9 +158,8 @@ func (m ServicesPopupModel) View() string {
 		Foreground(primaryColor).
 		Padding(0, 1)
 
-	sectionStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(dimColor)
+	runningSectionStyle := lipgloss.NewStyle().Bold(true).Foreground(runningSectionColor)
+	historySectionStyle := lipgloss.NewStyle().Bold(true).Foreground(historySectionColor)
 
 	selectedStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -174,9 +173,6 @@ func (m ServicesPopupModel) View() string {
 	dimStyle := lipgloss.NewStyle().
 		Foreground(dimColor)
 
-	runningTag := lipgloss.NewStyle().Foreground(runningTagColor).Bold(true).Render("[RUN]")
-	historyTag := lipgloss.NewStyle().Foreground(historyTagColor).Bold(true).Render("[HIST]")
-
 	header := headerStyle.Width(width - 4).Render("Services")
 
 	content := ""
@@ -184,7 +180,7 @@ func (m ServicesPopupModel) View() string {
 		content = dimStyle.Render("No services and no history")
 	} else {
 		if len(m.services) > 0 {
-			content += sectionStyle.Render("Running") + "\n"
+			content += runningSectionStyle.Render("Running") + "\n"
 			for i, svc := range m.services {
 				cursor := " "
 				itemStyle := normalStyle
@@ -192,7 +188,7 @@ func (m ServicesPopupModel) View() string {
 					cursor = ">"
 					itemStyle = selectedStyle
 				}
-				line := fmt.Sprintf("%s %s %s/%s", cursor, runningTag, svc.Platform, svc.RID)
+				line := fmt.Sprintf("%s %s/%s", cursor, svc.Platform, svc.RID)
 				content += itemStyle.Render(line) + "\n"
 			}
 		}
@@ -200,7 +196,7 @@ func (m ServicesPopupModel) View() string {
 			if len(m.services) > 0 {
 				content += "\n"
 			}
-			content += sectionStyle.Render("History") + "\n"
+			content += historySectionStyle.Render("History") + "\n"
 			for i, h := range m.history {
 				globalIdx := len(m.services) + i
 				cursor := " "
@@ -209,7 +205,7 @@ func (m ServicesPopupModel) View() string {
 					cursor = ">"
 					itemStyle = selectedStyle
 				}
-				line := fmt.Sprintf("%s %s %s/%s", cursor, historyTag, h.Platform, h.RID)
+				line := fmt.Sprintf("%s %s/%s", cursor, h.Platform, h.RID)
 				content += itemStyle.Render(line) + "\n"
 			}
 		}
