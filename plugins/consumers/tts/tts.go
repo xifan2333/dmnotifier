@@ -22,11 +22,6 @@ const (
 	defaultVoice   = "茉莉"
 )
 
-var presetVoices = []string{
-	"mimo_default", "冰糖", "茉莉", "苏打", "白桦",
-	"Mia", "Chloe", "Milo", "Dean",
-}
-
 type audioItem struct {
 	text      string
 	audioData []byte
@@ -357,10 +352,9 @@ func init() {
 			},
 			{
 				Name:    "voice",
-				Type:    plugin.FieldTypeEnum,
+				Type:    plugin.FieldTypeString,
 				Default: defaultVoice,
-				Desc:    "Voice (preset timbre)",
-				Options: presetVoices,
+				Desc:    "Voice (preset timbre, e.g. 茉莉/冰糖/苏打/白桦/Mia/Chloe/Milo/Dean/mimo_default)",
 			},
 			{
 				Name:    "style",
