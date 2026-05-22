@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"time"
 
@@ -38,7 +39,6 @@ type Consumer struct {
 	baseURL string
 	model   string
 	voice   string
-	style   string
 
 	httpClient *http.Client
 }
@@ -68,9 +68,6 @@ func (c *Consumer) Init(ctx context.Context, config map[string]interface{}) erro
 	}
 	if v, ok := config["voice"].(string); ok && v != "" {
 		c.voice = v
-	}
-	if v, ok := config["style"].(string); ok {
-		c.style = v
 	}
 
 	queueSize := 100
@@ -147,14 +144,27 @@ func (c *Consumer) formatMessage(msg *models.Message) string {
 
 	switch formatted.Type {
 	case "chat":
-		return fmt.Sprintf("%s说：%s", formatted.UserName, formatted.Content)
+		return hoistStyleTag(fmt.Sprintf("%s说：%s", formatted.UserName, formatted.Content))
 	case "superchat", "gift", "subscribe", "like", "enterroom":
-		return fmt.Sprintf("%s%s", formatted.UserName, formatted.Content)
+		return hoistStyleTag(fmt.Sprintf("%s%s", formatted.UserName, formatted.Content))
 	case "endlive":
-		return formatted.Content
+		return hoistStyleTag(formatted.Content)
 	default:
 		return ""
 	}
+}
+
+// styleTagRe 匹配第一个括号风格标记，半角或全角，非贪婪
+var styleTagRe = regexp.MustCompile(`[（(][^（()）]*[)）]`)
+
+// hoistStyleTag 把文本里第一个 (style) 标记移到句首，让风格作用于整句
+func hoistStyleTag(text string) string {
+	loc := styleTagRe.FindStringIndex(text)
+	if loc == nil || loc[0] == 0 {
+		return text
+	}
+	tag := text[loc[0]:loc[1]]
+	return tag + text[:loc[0]] + text[loc[1]:]
 }
 
 type mimoMessage struct {
@@ -187,15 +197,9 @@ type mimoResponse struct {
 }
 
 func (c *Consumer) generateAudio(text string) ([]byte, error) {
-	style := c.style
-	if style == "" {
-		style = "自然亲切"
-	}
-
 	reqBody := mimoRequest{
 		Model: c.model,
 		Messages: []mimoMessage{
-			{Role: "user", Content: style},
 			{Role: "assistant", Content: text},
 		},
 		Audio: mimoAudio{Format: "mp3", Voice: c.voice},
@@ -355,12 +359,6 @@ func init() {
 				Type:    plugin.FieldTypeString,
 				Default: defaultVoice,
 				Desc:    "Voice (preset timbre, e.g. 茉莉/冰糖/苏打/白桦/Mia/Chloe/Milo/Dean/mimo_default)",
-			},
-			{
-				Name:    "style",
-				Type:    plugin.FieldTypeString,
-				Default: "",
-				Desc:    "Style prompt (e.g. natural, lively); leave empty for default",
 			},
 			{
 				Name:    "queue_size",
