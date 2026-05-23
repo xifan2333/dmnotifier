@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os/exec"
-	"regexp"
 	"runtime"
 	"time"
 
@@ -18,9 +18,10 @@ import (
 )
 
 const (
-	defaultBaseURL = "https://token-plan-cn.xiaomimimo.com/v1"
-	defaultModel   = "mimo-v2.5-tts"
-	defaultVoice   = "茉莉"
+	defaultBaseURL      = "https://token-plan-cn.xiaomimimo.com/v1"
+	defaultModel        = "mimo-v2.5-tts"
+	defaultVoice        = "茉莉"
+	defaultRewriteModel = "mimo-v2.5-pro"
 )
 
 type audioItem struct {
@@ -35,20 +36,23 @@ type Consumer struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	apiKey  string
-	baseURL string
-	model   string
-	voice   string
+	apiKey        string
+	baseURL       string
+	model         string
+	voice         string
+	rewriteModel  string
+	rewritePrompt string
 
 	httpClient *http.Client
 }
 
 func New() plugin.Plugin {
 	return &Consumer{
-		BasePlugin: plugin.NewBasePlugin("tts", plugin.TypeConsumer),
-		baseURL:    defaultBaseURL,
-		model:      defaultModel,
-		voice:      defaultVoice,
+		BasePlugin:   plugin.NewBasePlugin("tts", plugin.TypeConsumer),
+		baseURL:      defaultBaseURL,
+		model:        defaultModel,
+		voice:        defaultVoice,
+		rewriteModel: defaultRewriteModel,
 	}
 }
 
@@ -68,6 +72,12 @@ func (c *Consumer) Init(ctx context.Context, config map[string]interface{}) erro
 	}
 	if v, ok := config["voice"].(string); ok && v != "" {
 		c.voice = v
+	}
+	if v, ok := config["rewrite_model"].(string); ok && v != "" {
+		c.rewriteModel = v
+	}
+	if v, ok := config["rewrite_prompt"].(string); ok {
+		c.rewritePrompt = v
 	}
 
 	queueSize := 100
@@ -93,19 +103,43 @@ func (c *Consumer) Init(ctx context.Context, config map[string]interface{}) erro
 }
 
 func (c *Consumer) Consume(ctx context.Context, msg *models.Message) error {
-	text := c.formatMessage(msg)
-	if text == "" {
+	prefix, content := c.formatMessage(msg)
+	if prefix == "" && content == "" {
 		return nil
 	}
 
 	go func() {
-		audioData, err := c.generateAudio(text)
+		if c.rewritePrompt != "" && content != "" {
+			if rewritten, err := c.rewriteText(content); err == nil && rewritten != "" {
+				content = rewritten
+			}
+		}
+
+		var wavs [][]byte
+		if prefix != "" {
+			pfxWav, err := c.generateAudio(prefix)
+			if err != nil {
+				return
+			}
+			wavs = append(wavs, pfxWav)
+		}
+		if content != "" {
+			ctntWav, err := c.generateAudio(content)
+			if err != nil {
+				return
+			}
+			wavs = append(wavs, ctntWav)
+		}
+		if len(wavs) == 0 {
+			return
+		}
+		merged, err := mergeWAVs(wavs)
 		if err != nil {
 			return
 		}
 
 		select {
-		case c.queue <- &audioItem{text: text, audioData: audioData}:
+		case c.queue <- &audioItem{text: prefix + content, audioData: merged}:
 		case <-c.ctx.Done():
 			return
 		default:
@@ -136,35 +170,100 @@ func (c *Consumer) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (c *Consumer) formatMessage(msg *models.Message) string {
+// formatMessage 拆出 (prefix, content)：prefix 用默认语气，content 经 AI 改写后带 style 标签
+func (c *Consumer) formatMessage(msg *models.Message) (prefix, content string) {
 	formatted, ok := msg.Data.(*models.FormattedMessage)
 	if !ok {
-		return ""
+		return "", ""
 	}
 
 	switch formatted.Type {
 	case "chat":
-		return hoistStyleTag(fmt.Sprintf("%s说：%s", formatted.UserName, formatted.Content))
+		return fmt.Sprintf("%s说：", formatted.UserName), formatted.Content
 	case "superchat", "gift", "subscribe", "like", "enterroom":
-		return hoistStyleTag(fmt.Sprintf("%s%s", formatted.UserName, formatted.Content))
+		return "", fmt.Sprintf("%s%s", formatted.UserName, formatted.Content)
 	case "endlive":
-		return hoistStyleTag(formatted.Content)
+		return "", formatted.Content
 	default:
-		return ""
+		return "", ""
 	}
 }
 
-// styleTagRe 匹配第一个括号风格标记，半角或全角，非贪婪
-var styleTagRe = regexp.MustCompile(`[（(][^（()）]*[)）]`)
-
-// hoistStyleTag 把文本里第一个 (style) 标记移到句首，让风格作用于整句
-func hoistStyleTag(text string) string {
-	loc := styleTagRe.FindStringIndex(text)
-	if loc == nil || loc[0] == 0 {
-		return text
+// mergeWAVs 用 skip-44 把多段相同格式的 WAV 合并成一段
+func mergeWAVs(wavs [][]byte) ([]byte, error) {
+	const hdr = 44
+	if len(wavs) == 0 {
+		return nil, fmt.Errorf("no wavs")
 	}
-	tag := text[loc[0]:loc[1]]
-	return tag + text[:loc[0]] + text[loc[1]:]
+	for i, w := range wavs {
+		if len(w) < hdr || string(w[0:4]) != "RIFF" || string(w[8:12]) != "WAVE" || string(w[36:40]) != "data" {
+			return nil, fmt.Errorf("wav %d: unexpected header layout", i)
+		}
+	}
+	if len(wavs) == 1 {
+		return wavs[0], nil
+	}
+	total := len(wavs[0])
+	for _, w := range wavs[1:] {
+		total += len(w) - hdr
+	}
+	out := make([]byte, 0, total)
+	out = append(out, wavs[0]...)
+	for _, w := range wavs[1:] {
+		out = append(out, w[hdr:]...)
+	}
+	binary.LittleEndian.PutUint32(out[4:8], uint32(len(out)-8))
+	binary.LittleEndian.PutUint32(out[40:44], uint32(len(out)-hdr))
+	return out, nil
+}
+
+// rewriteText 调用 chat completions，按 rewritePrompt 把文本改写成 TTS-ready 文本
+func (c *Consumer) rewriteText(text string) (string, error) {
+	reqBody := chatRequest{
+		Model: c.rewriteModel,
+		Messages: []mimoMessage{
+			{Role: "system", Content: c.rewritePrompt},
+			{Role: "user", Content: text},
+		},
+		Thinking: thinkingMode{Type: "disabled"},
+	}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("marshal rewrite request: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(c.ctx, 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("build rewrite request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("api-key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("rewrite http: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read rewrite response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("rewrite http %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var parsed chatResponse
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return "", fmt.Errorf("parse rewrite response: %w", err)
+	}
+	if len(parsed.Choices) == 0 {
+		return "", fmt.Errorf("empty choices in rewrite response")
+	}
+	return parsed.Choices[0].Message.Content, nil
 }
 
 type mimoMessage struct {
@@ -196,13 +295,31 @@ type mimoResponse struct {
 	} `json:"error,omitempty"`
 }
 
+type chatRequest struct {
+	Model    string        `json:"model"`
+	Messages []mimoMessage `json:"messages"`
+	Thinking thinkingMode  `json:"thinking"`
+}
+
+type thinkingMode struct {
+	Type string `json:"type"`
+}
+
+type chatResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+}
+
 func (c *Consumer) generateAudio(text string) ([]byte, error) {
 	reqBody := mimoRequest{
 		Model: c.model,
 		Messages: []mimoMessage{
 			{Role: "assistant", Content: text},
 		},
-		Audio: mimoAudio{Format: "mp3", Voice: c.voice},
+		Audio: mimoAudio{Format: "wav", Voice: c.voice},
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -359,6 +476,18 @@ func init() {
 				Type:    plugin.FieldTypeString,
 				Default: defaultVoice,
 				Desc:    "Voice (preset timbre, e.g. 茉莉/冰糖/苏打/白桦/Mia/Chloe/Milo/Dean/mimo_default)",
+			},
+			{
+				Name:    "rewrite_model",
+				Type:    plugin.FieldTypeString,
+				Default: defaultRewriteModel,
+				Desc:    "Chat model for rewriting text into TTS-ready form",
+			},
+			{
+				Name:    "rewrite_prompt",
+				Type:    plugin.FieldTypeString,
+				Default: "",
+				Desc:    "System prompt for rewrite; leave empty to skip rewrite step",
 			},
 			{
 				Name:    "queue_size",
