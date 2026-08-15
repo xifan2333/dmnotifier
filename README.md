@@ -4,9 +4,9 @@
 
 ## 特性
 
-- **多平台支持**: Bilibili、Douyin、**Xiaohongshu (xhs)**、Kuaishou、Douyu、Huya
+- **多平台支持**: Bilibili、Douyin、**Xiaohongshu**、Kuaishou、Douyu、Huya
 - **多路同时订阅**: 可同时连接多个 `platform/rid`，消息汇总进同一 pipeline
-- **CLI 管道友好**: `subscribe` / `add` / `stop` / `list`，支持 `-json` 行输出
+- **CLI**: `start` / `stop` / `list`（脚本友好，不进 TUI）；无参开 TUI；房间 `platform:rid[:cookie]`
 - **插件化架构**: 消息过滤、转换和消费插件
 - **多种消费方式**: TUI / 系统通知 / TTS / WebView 弹幕墙
 
@@ -32,50 +32,59 @@ go build -o dmnotifier ./cmd/dmnotifier
 
 ## 使用
 
-### TUI（默认）
+### TUI（人用）
 
 ```bash
-./dmnotifier
-# 或
-./dmnotifier tui
+dmnotifier
 ```
 
 快捷键：
 
 - `s` - 服务列表（Enter 可**叠加**订阅多路，`*` 表示本地已连）
-- `a` - 添加服务（含小红书）
+- `a` - 添加服务
 - `c` - 配置 UniBarrage API/WS
 - `p` - 插件配置
 - `r` - 刷新远端服务列表
 - `d` - **断开全部**本地订阅
 - `q` - 退出
 
-### CLI（管道 / 脚本）
+服务器地址与插件开关在 TUI 内修改（写入 XDG 配置）。
+
+### CLI（给脚本 / 其他程序）
+
+不打开 TUI。稳定机器输出 + exit code，方便 pipe 和调用。
 
 ```bash
-# 支持的平台与别名
-./dmnotifier platforms
+dmnotifier -h
+dmnotifier -v
 
-# 同时订阅 B 站 + 小红书（阻塞收消息，Ctrl+C 退出）
-./dmnotifier subscribe \
-  -room bilibili:689422 \
-  -room xhs:570409528162863169
+# start remote listener(s); write history
+dmnotifier start xiaohongshu:570409528162863169
+dmnotifier start bilibili:689422:"$(cat ~/secrets/bili.cookie)"
 
-# 只打 JSON 行（适合 jq / 下游管道）
-./dmnotifier subscribe -room xhs:ROOM_ID -json -no-plugins | jq .
-
-# 仅在 UniBarrage 上启动监听（不连本地 WS）
-./dmnotifier add -platform xiaohongshu -rid ROOM_ID
-
-# 列出 / 停止远端
-./dmnotifier list
-./dmnotifier stop -platform xhs -rid ROOM_ID
-
-# 覆盖服务器地址
-./dmnotifier subscribe -api http://127.0.0.1:8080 -ws ws://127.0.0.1:7777 -room dy:xxxx
+# list / stop
+dmnotifier list
+dmnotifier list --json
+dmnotifier stop bilibili:689422 xiaohongshu:570409528162863169
 ```
 
-`subscribe` 会：`POST` 启动 UniBarrage 监听 → 连接 `ws://.../{platform}/{rid}` → 消息进入插件 pipeline。
+房间格式：
+
+```text
+platform:rid
+platform:rid:cookie          # 第 2 个 : 之后整段都是 cookie
+```
+
+平台 id（无别名）：`bilibili` `douyin` `xiaohongshu` `kuaishou` `douyu` `huya`
+
+| 命令 | 作用 | stdout |
+|------|------|--------|
+| `start` | UniBarrage start + history | `platform\trid` |
+| `stop` | UniBarrage stop（保留 history） | `platform\trid` |
+| `list` | 当前远端监听 | `platform\trid` 或 `--json` |
+
+看弹幕：开 TUI，在列表/历史里连接本地 WS。
+
 
 ### 配置文件
 

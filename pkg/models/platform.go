@@ -2,7 +2,7 @@ package models
 
 import "strings"
 
-// Platform 直播平台类型
+// Platform 直播平台类型（与 UniBarrage 规范 id 一致，无别名）
 type Platform string
 
 const (
@@ -24,38 +24,25 @@ var AllPlatforms = []Platform{
 	PlatformHuya,
 }
 
-// PlatformAliases 别名 → 规范 id
-var PlatformAliases = map[string]Platform{
-	"bilibili":    PlatformBilibili,
-	"bili":        PlatformBilibili,
-	"douyin":      PlatformDouyin,
-	"dy":          PlatformDouyin,
-	"xiaohongshu": PlatformXiaoHongShu,
-	"xhs":         PlatformXiaoHongShu,
-	"red":         PlatformXiaoHongShu,
-	"kuaishou":    PlatformKuaishou,
-	"ks":          PlatformKuaishou,
-	"douyu":       PlatformDouyu,
-	"huya":        PlatformHuya,
-}
-
 // String 返回平台名称
 func (p Platform) String() string {
 	return string(p)
 }
 
-// NormalizePlatform 规范化平台 id（支持别名）
-func NormalizePlatform(s string) (Platform, bool) {
+// ParsePlatform 解析规范平台 id（大小写不敏感，不接受别名）
+func ParsePlatform(s string) (Platform, bool) {
 	s = strings.ToLower(strings.TrimSpace(s))
-	if p, ok := PlatformAliases[s]; ok {
-		return p, true
+	for _, p := range AllPlatforms {
+		if string(p) == s {
+			return p, true
+		}
 	}
 	return "", false
 }
 
 // IsValid 是否已知平台
 func (p Platform) IsValid() bool {
-	_, ok := PlatformAliases[string(p)]
+	_, ok := ParsePlatform(string(p))
 	return ok
 }
 

@@ -287,7 +287,7 @@ func (m *Manager) Cleanup() {
 }
 
 func normalizePlatform(s string) string {
-	if p, ok := models.NormalizePlatform(s); ok {
+	if p, ok := models.ParsePlatform(s); ok {
 		return string(p)
 	}
 	return strings.ToLower(strings.TrimSpace(s))

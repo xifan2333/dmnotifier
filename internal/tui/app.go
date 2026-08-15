@@ -9,27 +9,72 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	tuimsg "github.com/xifan2333/dmnotifier/internal/common"
 	"github.com/xifan2333/dmnotifier/internal/tui/business"
+	"github.com/xifan2333/dmnotifier/pkg/api"
 )
 
-// Run 启动 TUI 主循环
-func Run() {
-	config, err := LoadConfig()
-	if err != nil {
-		config = DefaultConfig()
+// Room is a platform/rid pair used as a TUI quick-entry target.
+type Room struct {
+	Platform string
+	RID      string
+	Cookie   string
+}
+
+// Options controls TUI startup (CLI quick entry).
+type Options struct {
+	// Connect rooms after the UI is up (start remote + local subscribe).
+	Connect []Room
+	// Optional one-shot server overrides (not written to disk).
+	APIAddress string
+	APIToken   string
+	WSAddress  string
+}
+
+// Run starts the TUI main loop.
+func Run(opts ...Options) error {
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
 	}
 
-	m := NewRootModel(config)
-	wrapped := &businessLogicMiddleware{model: m, config: config}
+	cfg, err := LoadConfig()
+	if err != nil {
+		cfg = DefaultConfig()
+	}
+	if o.APIAddress != "" {
+		cfg.Server.APIAddress = o.APIAddress
+	}
+	if o.APIToken != "" {
+		cfg.Server.APIToken = o.APIToken
+	}
+	if o.WSAddress != "" {
+		cfg.Server.WSAddress = o.WSAddress
+	}
+
+	m := NewRootModel(cfg)
+	wrapped := &businessLogicMiddleware{model: m, config: cfg}
 	p := tea.NewProgram(wrapped, tea.WithAltScreen())
 	wrapped.program = p
-	mgr := business.NewManager(p, config)
+	mgr := business.NewManager(p, cfg)
 	wrapped.mgr = mgr
 
+	// Quick-entry: auto connect after first frame.
+	if len(o.Connect) > 0 {
+		go func() {
+			// Let the alt-screen settle.
+			time.Sleep(150 * time.Millisecond)
+			for _, r := range o.Connect {
+				svc := &api.Service{Platform: r.Platform, RID: r.RID}
+				p.Send(tuimsg.ConnectServiceRequestMsg{Service: svc, Cookie: r.Cookie})
+			}
+		}()
+	}
+
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
+		mgr.Cleanup()
+		return err
 	}
 	mgr.Cleanup()
+	return nil
 }
 
 // businessLogicMiddleware 处理业务请求消息
@@ -115,4 +160,12 @@ func (m *businessLogicMiddleware) scheduleSave() {
 			m.program.Send(tuimsg.StatusMsg{Message: "Config auto-saved"})
 		}
 	})
+}
+
+// MustRun is like Run but exits the process on error (legacy helper).
+func MustRun(opts ...Options) {
+	if err := Run(opts...); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }

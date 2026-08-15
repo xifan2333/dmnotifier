@@ -9,7 +9,7 @@ import (
 )
 
 // Supported live platforms only (see pkg/models.AllPlatforms).
-// All PNGs are 256×256.
+// All PNGs are 512×512 (App Store artwork).
 //
 // Used by:
 //   - plugins/consumers/notify  (notification icon fallback)
@@ -28,7 +28,6 @@ var (
 		"bilibili":    "bilibili.png",
 		"douyin":      "douyin.png",
 		"xiaohongshu": "xiaohongshu.png",
-		"xhs":         "xhs.png",
 		"kuaishou":    "kuaishou.png",
 		"douyu":       "douyu.png",
 		"huya":        "huya.png",

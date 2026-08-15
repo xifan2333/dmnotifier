@@ -104,9 +104,13 @@ func (m *Manager) errf(err error) {
 	}
 }
 
-// StartRemote 在 UniBarrage 上启动监听（HTTP POST）
+// StartRemote starts a listener on UniBarrage (HTTP POST).
+// Already-listening is treated as success (idempotent for scripts).
 func (m *Manager) StartRemote(platform, rid, cookie string) error {
 	_, err := m.api.StartService(platform, rid, cookie)
+	if err != nil && isAlreadyListening(err) {
+		return nil
+	}
 	return err
 }
 

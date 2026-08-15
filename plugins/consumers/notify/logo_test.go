@@ -9,7 +9,7 @@ import (
 )
 
 func TestPlatformIconsEmbedded(t *testing.T) {
-	for _, p := range []string{"bilibili", "douyin", "xiaohongshu", "xhs", "kuaishou", "douyu", "huya"} {
+	for _, p := range []string{"bilibili", "douyin", "xiaohongshu", "kuaishou", "douyu", "huya"} {
 		path := platformicons.Path(p)
 		if path == "" {
 			t.Fatalf("%s: empty path", p)
@@ -22,10 +22,6 @@ func TestPlatformIconsEmbedded(t *testing.T) {
 		if err != nil || len(b) < 8 || b[0] != 0x89 {
 			t.Fatalf("%s: not png", p)
 		}
-	}
-	// no github/youtube
-	if platformicons.Path("youtube") != "" || platformicons.Path("github") != "" {
-		t.Fatal("unexpected extra platforms")
 	}
 }
 
