@@ -324,11 +324,15 @@ func (c *Consumer) handleDefaultAvatar(w http.ResponseWriter, r *http.Request) {
 
 	// 各平台默认头像 SVG
 	avatars := map[string]string{
-		"bilibili": `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#00a1d6'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>B</text></svg>`,
-		"douyu":    `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#ff7500'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>D</text></svg>`,
-		"huya":     `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#ff6600'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>H</text></svg>`,
-		"youtube":  `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#ff0000'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>Y</text></svg>`,
-		"twitch":   `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#9146ff'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>T</text></svg>`,
+		"bilibili":    `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#00a1d6'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>B</text></svg>`,
+		"douyin":      `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#fe2c55'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>抖</text></svg>`,
+		"xiaohongshu": `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#ff2442'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='18' font-weight='bold' font-family='Arial'>红</text></svg>`,
+		"xhs":         `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#ff2442'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='18' font-weight='bold' font-family='Arial'>红</text></svg>`,
+		"kuaishou":    `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#ff6600'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>快</text></svg>`,
+		"douyu":       `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#ff7500'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>D</text></svg>`,
+		"huya":        `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#ff6600'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>H</text></svg>`,
+		"youtube":     `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#ff0000'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>Y</text></svg>`,
+		"twitch":      `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#9146ff'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>T</text></svg>`,
 	}
 
 	// 默认头像（用户图标）

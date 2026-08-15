@@ -20,8 +20,9 @@ type RootModel struct {
 	addService    popups.AddServiceModel
 	pluginsConfig popups.PluginsConfigModel
 
-	// 当前连接的服务
-	selectedService *api.Service
+	// 当前连接（多路）
+	selectedService *api.Service // 最近连接的一个，兼容旧 UI
+	connectedKeys   []string     // platform/rid 列表
 
 	// 配置
 	config *AppConfig
@@ -173,8 +174,8 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "d":
-			// 断开连接
-			if m.selectedService != nil {
+			// 断开全部本地订阅
+			if len(m.connectedKeys) > 0 || m.selectedService != nil {
 				return m, func() tea.Msg {
 					return tuimsg.DisconnectServiceRequestMsg{}
 				}
@@ -186,10 +187,39 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tuimsg.ServiceConnectedMsg:
 		m.selectedService = msg.Service
-		m.statusMessage = fmt.Sprintf("Connected to %s/%s", msg.Service.Platform, msg.Service.RID)
+		if len(msg.AllKeys) > 0 {
+			m.connectedKeys = msg.AllKeys
+		} else if msg.Service != nil {
+			key := msg.Service.Platform + "/" + msg.Service.RID
+			m.connectedKeys = appendUnique(m.connectedKeys, key)
+		}
+		m.statusMessage = fmt.Sprintf("Connected to %s/%s (%d total)", msg.Service.Platform, msg.Service.RID, len(m.connectedKeys))
+
+	case tuimsg.ConnectedSnapshotMsg:
+		m.connectedKeys = msg.Keys
+		if len(msg.Keys) == 0 {
+			m.selectedService = nil
+		} else {
+			// keep selectedService if still present
+			found := false
+			if m.selectedService != nil {
+				cur := m.selectedService.Platform + "/" + m.selectedService.RID
+				for _, k := range msg.Keys {
+					if k == cur {
+						found = true
+						break
+					}
+				}
+			}
+			if !found {
+				parts := splitKey(msg.Keys[0])
+				m.selectedService = &api.Service{Platform: parts[0], RID: parts[1]}
+			}
+		}
 
 	case tuimsg.ServiceDisconnectedMsg:
 		m.selectedService = nil
+		m.connectedKeys = nil
 		m.statusMessage = "Disconnected"
 
 	case tuimsg.ErrorMsg:
@@ -246,14 +276,21 @@ func (m RootModel) View() string {
 	// 顶部标题栏
 	title := titleStyle.Width(m.width).Render("DMNotifier")
 
-	// 连接信息
+	// 连接信息（支持多路）
 	connectionInfo := ""
-	if m.selectedService != nil {
+	switch len(m.connectedKeys) {
+	case 0:
+		connectionInfo = dimStyle.Width(m.width).Render("Not connected - Press s to select service(s)")
+	case 1:
+		connectionInfo = infoStyle.Width(m.width).Render("Connected: " + m.connectedKeys[0])
+	default:
+		shown := m.connectedKeys
+		if len(shown) > 4 {
+			shown = append(shown[:4], fmt.Sprintf("+%d more", len(m.connectedKeys)-4))
+		}
 		connectionInfo = infoStyle.Width(m.width).Render(
-			fmt.Sprintf("Connected: %s/%s", m.selectedService.Platform, m.selectedService.RID),
+			fmt.Sprintf("Connected (%d): %s", len(m.connectedKeys), joinComma(shown)),
 		)
-	} else {
-		connectionInfo = dimStyle.Width(m.width).Render("Not connected - Press s to select service")
 	}
 
 	// 消息面板
@@ -263,7 +300,7 @@ func (m RootModel) View() string {
 	status := statusStyle.Width(m.width).Render(m.statusMessage)
 
 	// 帮助栏
-	help := helpStyle.Width(m.width).Render("a:Add | s:Services | c:Config | p:Plugins | r:Refresh | d:Disconnect | q:Quit")
+	help := helpStyle.Width(m.width).Render("a:Add | s:Services(multi) | c:Config | p:Plugins | r:Refresh | d:DisconnectAll | q:Quit")
 
 	mainView := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -329,4 +366,37 @@ func (m RootModel) View() string {
 // GetConfig 获取配置
 func (m RootModel) GetConfig() *AppConfig {
 	return m.config
+}
+
+func appendUnique(ss []string, s string) []string {
+	for _, x := range ss {
+		if x == s {
+			return ss
+		}
+	}
+	return append(ss, s)
+}
+
+func splitKey(key string) [2]string {
+	var out [2]string
+	for i := 0; i < len(key); i++ {
+		if key[i] == '/' {
+			out[0] = key[:i]
+			out[1] = key[i+1:]
+			return out
+		}
+	}
+	out[0] = key
+	return out
+}
+
+func joinComma(ss []string) string {
+	if len(ss) == 0 {
+		return ""
+	}
+	out := ss[0]
+	for i := 1; i < len(ss); i++ {
+		out += ", " + ss[i]
+	}
+	return out
 }

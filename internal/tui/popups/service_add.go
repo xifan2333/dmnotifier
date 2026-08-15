@@ -22,7 +22,7 @@ type AddServiceModel struct {
 func NewAddService() AddServiceModel {
 	return AddServiceModel{
 		visible:        false,
-		platforms:      []string{"bilibili", "douyin", "kuaishou", "douyu", "huya"},
+		platforms:      []string{"bilibili", "douyin", "xiaohongshu", "kuaishou", "douyu", "huya"},
 		platformCursor: 0,
 		inputs: [2]components.FormInputModel{
 			components.NewFormInput("Room ID", "", 50),

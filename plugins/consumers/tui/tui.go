@@ -41,6 +41,16 @@ func New() plugin.Plugin {
 				Foreground(lipgloss.Color("#ffffff")).
 				Bold(true).
 				Padding(0, 1),
+			"xiaohongshu": lipgloss.NewStyle().
+				Background(lipgloss.Color("#ff2442")).
+				Foreground(lipgloss.Color("#ffffff")).
+				Bold(true).
+				Padding(0, 1),
+			"xhs": lipgloss.NewStyle().
+				Background(lipgloss.Color("#ff2442")).
+				Foreground(lipgloss.Color("#ffffff")).
+				Bold(true).
+				Padding(0, 1),
 			"kuaishou": lipgloss.NewStyle().
 				Background(lipgloss.Color("#ff6600")).
 				Foreground(lipgloss.Color("#ffffff")).

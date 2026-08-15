@@ -8,16 +8,16 @@ import (
 	tuimsg "github.com/xifan2333/dmnotifier/internal/common"
 	"github.com/xifan2333/dmnotifier/internal/pipeline"
 	"github.com/xifan2333/dmnotifier/internal/plugin"
-	"github.com/xifan2333/dmnotifier/internal/tui"
+	"github.com/xifan2333/dmnotifier/internal/config"
 )
 
 // BuildPipelines 根据配置构建所有 pipeline
-func BuildPipelines(config *tui.AppConfig, program *tea.Program) (*pipeline.Manager, error) {
+func BuildPipelines(cfg *config.AppConfig, program *tea.Program) (*pipeline.Manager, error) {
 	ctx := context.Background()
 	manager := pipeline.NewManager()
 
 	// 为每个启用的消费者插件创建一个 pipeline
-	for _, pluginCfg := range config.Pipeline.Plugins {
+	for _, pluginCfg := range cfg.Pipeline.Plugins {
 		if !pluginCfg.Enabled {
 			continue
 		}

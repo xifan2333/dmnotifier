@@ -11,11 +11,15 @@ import (
 
 // 平台图标映射（使用 simple-icons）
 var platformIcons = map[string]string{
-	"bilibili": "https://cdn.simpleicons.org/bilibili/00a1d6",
-	"douyu":    "https://cdn.simpleicons.org/douyu/ff7500",
-	"huya":     "https://cdn.simpleicons.org/huya/ff6600",
-	"youtube":  "https://cdn.simpleicons.org/youtube/ff0000",
-	"twitch":   "https://cdn.simpleicons.org/twitch/9146ff",
+	"bilibili":    "https://cdn.simpleicons.org/bilibili/00a1d6",
+	"douyin":      "https://cdn.simpleicons.org/tiktok/000000",
+	"xiaohongshu": "https://cdn.simpleicons.org/xiaohongshu/ff2442",
+	"xhs":         "https://cdn.simpleicons.org/xiaohongshu/ff2442",
+	"kuaishou":    "https://cdn.simpleicons.org/kuaishou/ff4906",
+	"douyu":       "https://cdn.simpleicons.org/douyu/ff7500",
+	"huya":        "https://cdn.simpleicons.org/huya/ff6600",
+	"youtube":     "https://cdn.simpleicons.org/youtube/ff0000",
+	"twitch":      "https://cdn.simpleicons.org/twitch/9146ff",
 }
 
 // 默认用户头像（使用 remix-icon 的 user 图标）

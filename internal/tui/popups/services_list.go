@@ -10,12 +10,13 @@ import (
 )
 
 type ServicesPopupModel struct {
-	visible  bool
-	services []api.Service
-	history  []tuimsg.ServiceHistoryEntry
-	cursor   int
-	width    int
-	height   int
+	visible   bool
+	services  []api.Service
+	history   []tuimsg.ServiceHistoryEntry
+	connected map[string]bool // platform/rid
+	cursor    int
+	width     int
+	height    int
 }
 
 func NewServicesPopup() ServicesPopupModel {
@@ -59,8 +60,19 @@ func (m ServicesPopupModel) Update(msg tea.Msg) (ServicesPopupModel, tea.Cmd) {
 	case tuimsg.ServicesLoadedMsg:
 		m.services = msg.Services
 		m.history = msg.History
+		m.connected = map[string]bool{}
+		for _, k := range msg.Connected {
+			m.connected[k] = true
+		}
 		if m.cursor >= m.totalItems() {
 			m.cursor = 0
+		}
+		return m, nil
+
+	case tuimsg.ConnectedSnapshotMsg:
+		m.connected = map[string]bool{}
+		for _, k := range msg.Keys {
+			m.connected[k] = true
 		}
 		return m, nil
 
@@ -180,7 +192,7 @@ func (m ServicesPopupModel) View() string {
 		content = dimStyle.Render("No services and no history")
 	} else {
 		if len(m.services) > 0 {
-			content += runningSectionStyle.Render("Running") + "\n"
+			content += runningSectionStyle.Render("Running (Enter adds local subscribe)") + "\n"
 			for i, svc := range m.services {
 				cursor := " "
 				itemStyle := normalStyle
@@ -188,7 +200,11 @@ func (m ServicesPopupModel) View() string {
 					cursor = ">"
 					itemStyle = selectedStyle
 				}
-				line := fmt.Sprintf("%s %s/%s", cursor, svc.Platform, svc.RID)
+				mark := " "
+				if m.connected[svc.Platform+"/"+svc.RID] {
+					mark = "*"
+				}
+				line := fmt.Sprintf("%s%s %s/%s", cursor, mark, svc.Platform, svc.RID)
 				content += itemStyle.Render(line) + "\n"
 			}
 		}
@@ -215,7 +231,7 @@ func (m ServicesPopupModel) View() string {
 	if m.isHistoryCursor() && len(m.history) > 0 {
 		helpText = "Up/Down: Select | Enter: Reconnect | x: Remove from history | Esc: Close"
 	} else {
-		helpText = "Up/Down: Select | Enter: Connect | x: Stop | Esc: Close"
+		helpText = "Up/Down: Select | Enter: Subscribe(+multi) | x: Stop remote | Esc: Close"
 	}
 	help := dimStyle.Render(helpText)
 

@@ -4,93 +4,104 @@
 
 ## 特性
 
-- **多平台支持**: Bilibili、Douyin、Kuaishou、Douyu、Huya
-- **插件化架构**: 灵活的消息过滤、转换和消费插件系统
-- **多种消费方式**:
-  - TUI 终端界面显示
-  - 系统通知
-  - TTS 语音播报
-  - WebView 弹幕墙
-- **消息过滤**: 支持按消息类型过滤（聊天、礼物、SuperChat 等）
-- **实时响应**: 异步处理，界面始终流畅
+- **多平台支持**: Bilibili、Douyin、**Xiaohongshu (xhs)**、Kuaishou、Douyu、Huya
+- **多路同时订阅**: 可同时连接多个 `platform/rid`，消息汇总进同一 pipeline
+- **CLI 管道友好**: `subscribe` / `add` / `stop` / `list`，支持 `-json` 行输出
+- **插件化架构**: 消息过滤、转换和消费插件
+- **多种消费方式**: TUI / 系统通知 / TTS / WebView 弹幕墙
 
 ## 安装
 
 ### 从 Release 下载
 
-访问 [Releases](https://github.com/xifan2333/dmnotifier/releases) 页面下载适合您平台的预编译二进制文件。
+访问 [Releases](https://github.com/xifan2333/dmnotifier/releases) 下载预编译二进制。
+
+### Arch Linux
+
+```bash
+yay -S dmnotifier-bin
+```
 
 ### 从源码编译
 
 ```bash
 git clone https://github.com/xifan2333/dmnotifier.git
 cd dmnotifier
-go build -o dmnotifier ./cmd/dmnotifier-tui
+go build -o dmnotifier ./cmd/dmnotifier
+# 兼容旧入口（仅 TUI）
+go build -o dmnotifier-tui ./cmd/dmnotifier-tui
 ```
 
 ## 使用
 
-### 启动 TUI 客户端
+### TUI（默认）
 
 ```bash
 ./dmnotifier
+# 或
+./dmnotifier tui
 ```
 
-### 快捷键
+快捷键：
 
-- `s` - 选择服务
-- `a` - 添加服务
-- `c` - 配置服务器
+- `s` - 服务列表（Enter 可**叠加**订阅多路，`*` 表示本地已连）
+- `a` - 添加服务（含小红书）
+- `c` - 配置 UniBarrage API/WS
 - `p` - 插件配置
-- `r` - 刷新服务列表
-- `d` - 断开连接
-- `Ctrl+S` - 保存配置
-- `q` / `Ctrl+C` - 退出
+- `r` - 刷新远端服务列表
+- `d` - **断开全部**本地订阅
+- `q` - 退出
+
+### CLI（管道 / 脚本）
+
+```bash
+# 支持的平台与别名
+./dmnotifier platforms
+
+# 同时订阅 B 站 + 小红书（阻塞收消息，Ctrl+C 退出）
+./dmnotifier subscribe \
+  -room bilibili:689422 \
+  -room xhs:570409528162863169
+
+# 只打 JSON 行（适合 jq / 下游管道）
+./dmnotifier subscribe -room xhs:ROOM_ID -json -no-plugins | jq .
+
+# 仅在 UniBarrage 上启动监听（不连本地 WS）
+./dmnotifier add -platform xiaohongshu -rid ROOM_ID
+
+# 列出 / 停止远端
+./dmnotifier list
+./dmnotifier stop -platform xhs -rid ROOM_ID
+
+# 覆盖服务器地址
+./dmnotifier subscribe -api http://127.0.0.1:8080 -ws ws://127.0.0.1:7777 -room dy:xxxx
+```
+
+`subscribe` 会：`POST` 启动 UniBarrage 监听 → 连接 `ws://.../{platform}/{rid}` → 消息进入插件 pipeline。
 
 ### 配置文件
 
-配置文件位于 `~/.config/dmnotifier/config.json`
+路径：`~/.dmnotifier/config.yaml`
 
-```json
-{
-  "server": {
-    "api_address": "https://danmu.xifan2333.fun",
-    "api_token": "your-token",
-    "ws_address": "ws://danmu.xifan2333.fun:7777"
-  },
-  "pipeline": {
-    "plugins": [
-      {
-        "name": "tui",
-        "enabled": true,
-        "message_types": ["chat", "gift", "superchat"]
-      },
-      {
-        "name": "notify",
-        "enabled": true,
-        "message_types": ["superchat", "gift"]
-      },
-      {
-        "name": "tts",
-        "enabled": false,
-        "message_types": ["chat"],
-        "config": {
-          "voice": "zh-CN-XiaoxiaoNeural",
-          "language": "zh-CN"
-        }
-      },
-      {
-        "name": "webview",
-        "enabled": false,
-        "message_types": ["chat", "gift", "superchat"],
-        "config": {
-          "port": 8080,
-          "auto_port": true
-        }
-      }
-    ]
-  }
-}
+```yaml
+server:
+  api_address: http://127.0.0.1:8080
+  api_token: ""
+  ws_address: ws://127.0.0.1:7777
+pipeline:
+  plugins:
+    - name: tui
+      enabled: true
+      messagetypes: [Chat, Gift, Like, EnterRoom, Subscribe, SuperChat, EndLive]
+    - name: notify
+      enabled: true
+      messagetypes: [Chat, Gift, Like, EnterRoom, Subscribe, SuperChat, EndLive]
+    - name: tts
+      enabled: false
+      messagetypes: [Chat]
+history:
+  - platform: bilibili
+    rid: "689422"
 ```
 
 ## 插件系统

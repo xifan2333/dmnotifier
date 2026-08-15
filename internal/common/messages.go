@@ -28,15 +28,23 @@ type ServiceHistoryEntry struct {
 
 // 数据消息类型
 type ServicesLoadedMsg struct {
-	Services []api.Service
-	History  []ServiceHistoryEntry
+	Services  []api.Service
+	History   []ServiceHistoryEntry
+	Connected []string // platform/rid currently subscribed locally
 }
 
 type ServiceConnectedMsg struct {
-	Service *api.Service
+	Service   *api.Service
+	AllKeys   []string // all connected keys after this event
+	Connected int
 }
 
 type ServiceDisconnectedMsg struct{}
+
+// ConnectedSnapshotMsg 多路订阅快照（状态栏用）
+type ConnectedSnapshotMsg struct {
+	Keys []string
+}
 
 // 内部消息类型
 type ConnectSuccessMsg struct {
@@ -46,9 +54,16 @@ type ConnectSuccessMsg struct {
 // 请求消息类型（发送给 main.go 处理）
 type ConnectServiceRequestMsg struct {
 	Service *api.Service
+	Cookie  string // optional, used when starting remote if needed
 }
 
 type DisconnectServiceRequestMsg struct{}
+
+// DisconnectOneRequestMsg 断开单路本地订阅
+type DisconnectOneRequestMsg struct {
+	Platform string
+	RID      string
+}
 
 type StopServiceRequestMsg struct {
 	Platform string
