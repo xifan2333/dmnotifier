@@ -7,6 +7,7 @@ import (
 	"github.com/gen2brain/beeep"
 	"github.com/xifan2333/dmnotifier/internal/plugin"
 	"github.com/xifan2333/dmnotifier/pkg/models"
+	"github.com/xifan2333/dmnotifier/plugins/transforms/format"
 )
 
 // Consumer 系统通知消费者
@@ -68,25 +69,26 @@ func (c *Consumer) Consume(ctx context.Context, msg *models.Message) error {
 	title := fmt.Sprintf("%s | %s", formatted.Platform, formatted.UserName)
 	message := formatted.Content
 
-	return c.sendNotification(title, message, formatted.Avatar)
+	return c.sendNotification(title, message, formatted.Avatar, formatted.Platform)
 }
 
-// sendNotification 发送系统通知
-func (c *Consumer) sendNotification(title, message, iconURL string) error {
-	// 获取头像本地路径
+// sendNotification 发送系统通知。
+// 图标优先级：用户头像 → 平台 simple-icons PNG → 无图标。
+func (c *Consumer) sendNotification(title, message, iconURL, platform string) error {
 	iconPath := ""
-	if c.avatarCache != nil && iconURL != "" {
-		iconPath = c.avatarCache.Get(iconURL)
+	if c.avatarCache != nil {
+		if iconURL != "" {
+			iconPath = c.avatarCache.Get(iconURL)
+		}
+		// 头像缺失或下载失败 → 平台 logo（simple-icons PNG）
+		if iconPath == "" {
+			if logo := format.PlatformIcon(platform); logo != "" && logo != iconURL {
+				iconPath = c.avatarCache.Get(logo)
+			}
+		}
 	}
 
-	// 使用 beeep 发送跨平台通知
-	err := beeep.Notify(title, message, iconPath)
-	if err != nil {
-
-		return err
-	}
-
-	return nil
+	return beeep.Notify(title, message, iconPath)
 }
 
 // Stop 停止插件

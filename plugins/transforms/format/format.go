@@ -9,21 +9,27 @@ import (
 	"github.com/xifan2333/dmnotifier/pkg/models"
 )
 
-// 平台图标映射（使用 simple-icons）
-var platformIcons = map[string]string{
-	"bilibili":    "https://cdn.simpleicons.org/bilibili/00a1d6",
-	"douyin":      "https://cdn.simpleicons.org/tiktok/000000",
-	"xiaohongshu": "https://cdn.simpleicons.org/xiaohongshu/ff2442",
-	"xhs":         "https://cdn.simpleicons.org/xiaohongshu/ff2442",
-	"kuaishou":    "https://cdn.simpleicons.org/kuaishou/ff4906",
-	"douyu":       "https://cdn.simpleicons.org/douyu/ff7500",
-	"huya":        "https://cdn.simpleicons.org/huya/ff6600",
-	"youtube":     "https://cdn.simpleicons.org/youtube/ff0000",
-	"twitch":      "https://cdn.simpleicons.org/twitch/9146ff",
+// simpleIconsPNG is the jsDelivr mirror of simple-icons rendered as PNG
+// (cdn.simpleicons.org itself only serves SVG; notify-send/mako need raster).
+const simpleIconsPNG = "https://cdn.jsdelivr.net/gh/cuckcoder/simple-icons-png@main/icons/"
+
+// PlatformIcons maps platform id → PNG logo URL (for default avatars / notify).
+var PlatformIcons = map[string]string{
+	"bilibili":    simpleIconsPNG + "bilibili.png",
+	"douyin":      simpleIconsPNG + "tiktok.png",
+	"xiaohongshu": simpleIconsPNG + "xiaohongshu.png",
+	"xhs":         simpleIconsPNG + "xiaohongshu.png",
+	"kuaishou":    simpleIconsPNG + "kuaishou.png",
+	// douyu/huya are not in simple-icons; use site favicon PNG
+	"douyu":   "https://www.google.com/s2/favicons?domain=douyu.com&sz=128",
+	"huya":    "https://www.google.com/s2/favicons?domain=huya.com&sz=128",
+	"youtube": simpleIconsPNG + "youtube.png",
+	"twitch":  simpleIconsPNG + "twitch.png",
 }
 
-// 默认用户头像（使用 remix-icon 的 user 图标）
-const defaultUserAvatar = "https://cdn.jsdelivr.net/npm/remixicon@3.5.0/icons/User/user-fill.svg"
+// DefaultUserAvatar generic fallback PNG (simple-icons "livechat"-style via twitch is ok;
+// use a neutral simple-icons entry).
+const DefaultUserAvatar = simpleIconsPNG + "livechat.png"
 
 // Transform 格式化转换器
 type Transform struct {
@@ -159,19 +165,20 @@ func (t *Transform) convertToFormatted(msg *models.Message) *models.FormattedMes
 	}
 }
 
-// getAvatar 获取头像URL，如果为空则返回对应平台的默认图标
+// PlatformIcon returns the PNG logo URL for a platform id.
+func PlatformIcon(platform string) string {
+	if icon, ok := PlatformIcons[platform]; ok {
+		return icon
+	}
+	return DefaultUserAvatar
+}
+
+// getAvatar：有用户头像用用户头像，否则用平台 logo PNG。
 func (t *Transform) getAvatar(avatar string, platform string) string {
 	if avatar != "" {
 		return avatar
 	}
-
-	// 尝试获取平台图标
-	if icon, ok := platformIcons[platform]; ok {
-		return icon
-	}
-
-	// 返回默认用户头像
-	return defaultUserAvatar
+	return PlatformIcon(platform)
 }
 
 func init() {
