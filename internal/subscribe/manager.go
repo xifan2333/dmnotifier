@@ -3,6 +3,7 @@ package subscribe
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/xifan2333/dmnotifier/internal/client"
@@ -208,12 +209,25 @@ func (m *Manager) DisconnectAll() {
 	}
 }
 
+// isAlreadyListening reports whether err means the room is already started on UniBarrage.
+func isAlreadyListening(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "已在监听") ||
+		strings.Contains(strings.ToLower(s), "already")
+}
+
 // Subscribe = StartRemote + Connect（管道一步到位）
+// StartRemote failure aborts unless the room is already being listened to.
 func (m *Manager) Subscribe(t Target) error {
 	if err := m.StartRemote(t.Platform, t.RID, t.Cookie); err != nil {
-		// 若已在监听，UniBarrage 会报已存在——仍尝试连 WS
-		// 只有非“已存在”类错误才真正失败时，继续尝试 connect 更利于幂等
-		m.status(fmt.Sprintf("start remote %s: %v (still connecting ws)", t.Key(), err))
+		if isAlreadyListening(err) {
+			m.status(fmt.Sprintf("remote already listening %s", t.Key()))
+		} else {
+			return fmt.Errorf("start remote %s: %w", t.Key(), err)
+		}
 	}
 	return m.Connect(t)
 }

@@ -95,7 +95,8 @@ func (m *Manager) UpdateServerConfig(apiAddress, apiToken, wsAddress string) {
 	m.sub = m.newSub()
 }
 
-// UpdatePluginsConfig 更新插件配置
+// UpdatePluginsConfig 更新插件配置。
+// 已建立的订阅仍使用旧 pipeline；需断开后重新连接才会按新配置生效。
 func (m *Manager) UpdatePluginsConfig(plugins []tuimsg.PluginConfig) {
 	m.config.Pipeline.Plugins = plugins
 }

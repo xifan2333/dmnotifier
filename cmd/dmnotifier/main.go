@@ -26,6 +26,11 @@ import (
 	_ "github.com/xifan2333/dmnotifier/plugins/transforms/format"
 )
 
+// version is overridden at link time:
+//
+//	go build -ldflags "-X main.version=v1.1.3" ./cmd/dmnotifier
+var version = "dev"
+
 func main() {
 	if len(os.Args) < 2 {
 		tui.Run()
@@ -50,7 +55,7 @@ func main() {
 	case "help", "-h", "--help":
 		printHelp()
 	case "version", "-v", "--version":
-		fmt.Println("dmnotifier 1.1.2")
+		fmt.Println("dmnotifier", version)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", cmd)
 		printHelp()
@@ -242,8 +247,16 @@ func enableOnly(cfg *config.AppConfig, names []string) {
 			set[n] = true
 		}
 	}
+	known := map[string]bool{}
 	for i := range cfg.Pipeline.Plugins {
-		cfg.Pipeline.Plugins[i].Enabled = set[cfg.Pipeline.Plugins[i].Name]
+		name := cfg.Pipeline.Plugins[i].Name
+		known[name] = true
+		cfg.Pipeline.Plugins[i].Enabled = set[name]
+	}
+	for n := range set {
+		if !known[n] {
+			fmt.Fprintf(os.Stderr, "warning: unknown plugin %q (ignored)\n", n)
+		}
 	}
 }
 
