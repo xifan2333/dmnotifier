@@ -20,11 +20,9 @@ type AvatarCache struct {
 	cache      map[string]string // URL -> 本地路径
 }
 
-// defaultCacheDir uses the OS temp dir.
-// Name is "dmnotifier-avatars" (flat), not "dmnotifier/avatars" — the latter collides
-// when a local build binary is placed at $TMPDIR/dmnotifier.
+// defaultCacheDir uses the OS temp dir: $TMPDIR/dmnotifier/avatars
 func defaultCacheDir() string {
-	return filepath.Join(os.TempDir(), "dmnotifier-avatars")
+	return filepath.Join(os.TempDir(), "dmnotifier", "avatars")
 }
 
 // NewAvatarCache 创建头像缓存管理器

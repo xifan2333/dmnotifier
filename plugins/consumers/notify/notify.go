@@ -37,7 +37,7 @@ func (c *Consumer) Init(ctx context.Context, config map[string]interface{}) erro
 	// 创建上下文
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 
-	// OS temp dir: $TMPDIR/dmnotifier-avatars (see defaultCacheDir)
+	// 系统临时目录：$TMPDIR/dmnotifier/avatars
 	avatarCache, err := NewAvatarCache("")
 	if err != nil {
 

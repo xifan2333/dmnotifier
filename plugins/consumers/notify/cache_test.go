@@ -8,12 +8,9 @@ import (
 
 func TestDefaultCacheDir(t *testing.T) {
 	d := defaultCacheDir()
-	if filepath.Base(d) != "dmnotifier-avatars" {
-		t.Fatalf("got %s", d)
-	}
-	if filepath.Dir(d) != os.TempDir() && filepath.Clean(filepath.Dir(d)) != filepath.Clean(os.TempDir()) {
-		// TempDir may have trailing slash differences
-		t.Logf("dir=%s temp=%s", filepath.Dir(d), os.TempDir())
+	want := filepath.Join(os.TempDir(), "dmnotifier", "avatars")
+	if d != want {
+		t.Fatalf("got %s want %s", d, want)
 	}
 }
 
