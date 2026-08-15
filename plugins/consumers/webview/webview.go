@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/xifan2333/dmnotifier/internal/plugin"
+	"github.com/xifan2333/dmnotifier/internal/platformicons"
 	"github.com/xifan2333/dmnotifier/pkg/models"
 )
 
@@ -317,35 +318,18 @@ func (c *Consumer) handleImageProxy(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleDefaultAvatar 提供默认头像
+// handleDefaultAvatar serves embedded platform PNG logos (256px).
 func (c *Consumer) handleDefaultAvatar(w http.ResponseWriter, r *http.Request) {
-	// 从 URL 路径获取平台名称
 	platform := r.URL.Path[len("/avatar/default/"):]
-
-	// 各平台默认头像 SVG
-	avatars := map[string]string{
-		"bilibili":    `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#00a1d6'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>B</text></svg>`,
-		"douyin":      `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#fe2c55'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>抖</text></svg>`,
-		"xiaohongshu": `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#ff2442'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='18' font-weight='bold' font-family='Arial'>红</text></svg>`,
-		"xhs":         `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#ff2442'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='18' font-weight='bold' font-family='Arial'>红</text></svg>`,
-		"kuaishou":    `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#ff6600'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>快</text></svg>`,
-		"douyu":       `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#ff7500'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>D</text></svg>`,
-		"huya":        `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#ff6600'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>H</text></svg>`,
-		"youtube":     `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#ff0000'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>Y</text></svg>`,
-		"twitch":      `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#9146ff'/><text x='24' y='32' text-anchor='middle' fill='white' font-size='20' font-weight='bold' font-family='Arial'>T</text></svg>`,
+	data, err := platformicons.Bytes(platform)
+	if err != nil {
+		// minimal 1x1 transparent png
+		w.WriteHeader(http.StatusNotFound)
+		return
 	}
-
-	// 默认头像（用户图标）
-	defaultSVG := `<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='24' fill='#cccccc'/><circle cx='24' cy='18' r='8' fill='#ffffff'/><path d='M12 38c0-6.627 5.373-12 12-12s12 5.373 12 12' fill='#ffffff'/></svg>`
-
-	svg, ok := avatars[platform]
-	if !ok {
-		svg = defaultSVG
-	}
-
-	w.Header().Set("Content-Type", "image/svg+xml")
-	w.Header().Set("Cache-Control", "public, max-age=31536000") // 缓存1年
-	w.Write([]byte(svg))
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=31536000")
+	w.Write(data)
 }
 
 func init() {

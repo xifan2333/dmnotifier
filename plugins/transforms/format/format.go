@@ -3,37 +3,29 @@ package format
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/xifan2333/dmnotifier/internal/plugin"
 	"github.com/xifan2333/dmnotifier/pkg/models"
 )
 
-// favicon returns a site favicon PNG URL (Google s2; works with notify-send).
-func favicon(domain string) string {
-	return "https://www.google.com/s2/favicons?domain=" + domain + "&sz=128"
+// platformIconMarker is a special Avatar value meaning "use embedded platform logo".
+// Consumers that need a real image (notify/webview) resolve this to a local asset.
+const platformIconPrefix = "platform-icon:"
+
+// PlatformIconRef returns the marker for an embedded platform logo.
+func PlatformIconRef(platform string) string {
+	return platformIconPrefix + platform
 }
 
-// simpleIconsPNG is simple-icons rendered as real PNG (jsDelivr).
-// Used when Google favicon is missing (e.g. xiaohongshu.com → 404 placeholder).
-const simpleIconsPNG = "https://cdn.jsdelivr.net/gh/cuckcoder/simple-icons-png@main/icons/"
-
-// PlatformIcons maps platform id → default icon PNG URL.
-var PlatformIcons = map[string]string{
-	"bilibili": favicon("bilibili.com"),
-	"douyin":   favicon("douyin.com"),
-	// Google s2 returns 404 for xhs domains; use simple-icons PNG instead.
-	"xiaohongshu": simpleIconsPNG + "xiaohongshu.png",
-	"xhs":         simpleIconsPNG + "xiaohongshu.png",
-	"kuaishou":    favicon("kuaishou.com"),
-	"douyu":       favicon("douyu.com"),
-	"huya":        favicon("huya.com"),
-	"youtube":     favicon("youtube.com"),
-	"twitch":      favicon("twitch.tv"),
+// ParsePlatformIconRef extracts platform id from a marker; ok=false if not a marker.
+func ParsePlatformIconRef(avatar string) (platform string, ok bool) {
+	if strings.HasPrefix(avatar, platformIconPrefix) {
+		return strings.TrimPrefix(avatar, platformIconPrefix), true
+	}
+	return "", false
 }
-
-// DefaultUserAvatar generic fallback favicon.
-const DefaultUserAvatar = "https://www.google.com/s2/favicons?domain=github.com&sz=128"
 
 // Transform 格式化转换器
 type Transform struct {
@@ -51,138 +43,80 @@ func New() plugin.Plugin {
 func (t *Transform) Transform(ctx context.Context, msg *models.Message) (*models.Message, error) {
 	formatted := t.convertToFormatted(msg)
 	if formatted == nil {
-		// 不支持的消息类型，返回原消息
 		return msg, nil
 	}
-
-	// 创建新消息，使用统一格式
-	newMsg := &models.Message{
+	return &models.Message{
 		Type:     msg.Type,
 		Platform: msg.Platform,
 		RID:      msg.RID,
 		Data:     formatted,
 		RawData:  msg.RawData,
-	}
-
-	return newMsg, nil
+	}, nil
 }
 
-// convertToFormatted 将消息转换为统一格式
 func (t *Transform) convertToFormatted(msg *models.Message) *models.FormattedMessage {
 	timestamp := time.Now()
 	platform := string(msg.Platform)
 
 	switch data := msg.Data.(type) {
 	case *models.ChatData:
-
 		return &models.FormattedMessage{
-			UserName:    data.Name,
-			Platform:    platform,
-			Avatar:      t.getAvatar(data.Avatar, platform),
-			Content:     data.Content,
-			Timestamp:   timestamp,
-			Type:        "chat",
-			MessageType: models.TypeChat,
+			UserName: data.Name, Platform: platform,
+			Avatar: t.getAvatar(data.Avatar, platform), Content: data.Content,
+			Timestamp: timestamp, Type: "chat", MessageType: models.TypeChat,
 		}
-
 	case *models.SuperChatData:
-
-		content := fmt.Sprintf("%.2f 元: %s", data.Price, data.Content)
 		return &models.FormattedMessage{
-			UserName:    data.Name,
-			Platform:    platform,
-			Avatar:      t.getAvatar(data.Avatar, platform),
-			Content:     content,
-			Timestamp:   timestamp,
-			Type:        "superchat",
-			MessageType: models.TypeSuperChat,
+			UserName: data.Name, Platform: platform,
+			Avatar: t.getAvatar(data.Avatar, platform),
+			Content: fmt.Sprintf("%.2f 元: %s", data.Price, data.Content),
+			Timestamp: timestamp, Type: "superchat", MessageType: models.TypeSuperChat,
 		}
-
 	case *models.GiftData:
-
-		totalPrice := data.Price * float64(data.Num)
-		content := fmt.Sprintf("送出了 %d 个 %s (%.2f 元)", data.Num, data.Item, totalPrice)
+		total := data.Price * float64(data.Num)
 		return &models.FormattedMessage{
-			UserName:    data.Name,
-			Platform:    platform,
-			Avatar:      t.getAvatar(data.Avatar, platform),
-			Content:     content,
-			Timestamp:   timestamp,
-			Type:        "gift",
-			MessageType: models.TypeGift,
+			UserName: data.Name, Platform: platform,
+			Avatar: t.getAvatar(data.Avatar, platform),
+			Content: fmt.Sprintf("送出了 %d 个 %s (%.2f 元)", data.Num, data.Item, total),
+			Timestamp: timestamp, Type: "gift", MessageType: models.TypeGift,
 		}
-
 	case *models.SubscribeData:
-
-		content := fmt.Sprintf("订阅了 %s", data.Item)
 		return &models.FormattedMessage{
-			UserName:    data.Name,
-			Platform:    platform,
-			Avatar:      t.getAvatar(data.Avatar, platform),
-			Content:     content,
-			Timestamp:   timestamp,
-			Type:        "subscribe",
-			MessageType: models.TypeSubscribe,
+			UserName: data.Name, Platform: platform,
+			Avatar: t.getAvatar(data.Avatar, platform),
+			Content: fmt.Sprintf("订阅了 %s", data.Item),
+			Timestamp: timestamp, Type: "subscribe", MessageType: models.TypeSubscribe,
 		}
-
 	case *models.LikeData:
-
-		content := fmt.Sprintf("点赞了 %d 次", data.Count)
 		return &models.FormattedMessage{
-			UserName:    data.Name,
-			Platform:    platform,
-			Avatar:      t.getAvatar(data.Avatar, platform),
-			Content:     content,
-			Timestamp:   timestamp,
-			Type:        "like",
-			MessageType: models.TypeLike,
+			UserName: data.Name, Platform: platform,
+			Avatar: t.getAvatar(data.Avatar, platform),
+			Content: fmt.Sprintf("点赞了 %d 次", data.Count),
+			Timestamp: timestamp, Type: "like", MessageType: models.TypeLike,
 		}
-
 	case *models.EnterRoomData:
-
-		content := "进入了直播间"
 		return &models.FormattedMessage{
-			UserName:    data.Name,
-			Platform:    platform,
-			Avatar:      t.getAvatar(data.Avatar, platform),
-			Content:     content,
-			Timestamp:   timestamp,
-			Type:        "enterroom",
-			MessageType: models.TypeEnterRoom,
+			UserName: data.Name, Platform: platform,
+			Avatar: t.getAvatar(data.Avatar, platform), Content: "进入了直播间",
+			Timestamp: timestamp, Type: "enterroom", MessageType: models.TypeEnterRoom,
 		}
-
 	case *models.EndLiveData:
-
-		content := "直播结束"
 		return &models.FormattedMessage{
-			UserName:    "",
-			Platform:    platform,
-			Avatar:      t.getAvatar("", platform),
-			Content:     content,
-			Timestamp:   timestamp,
-			Type:        "endlive",
-			MessageType: models.TypeEndLive,
+			UserName: "", Platform: platform,
+			Avatar: PlatformIconRef(platform), Content: "直播结束",
+			Timestamp: timestamp, Type: "endlive", MessageType: models.TypeEndLive,
 		}
-
 	default:
 		return nil
 	}
 }
 
-// PlatformIcon returns the PNG logo URL for a platform id.
-func PlatformIcon(platform string) string {
-	if icon, ok := PlatformIcons[platform]; ok {
-		return icon
-	}
-	return DefaultUserAvatar
-}
-
-// getAvatar：有用户头像用用户头像，否则用平台 logo PNG。
+// getAvatar: user avatar URL if present, else platform-icon marker for local logo.
 func (t *Transform) getAvatar(avatar string, platform string) string {
 	if avatar != "" {
 		return avatar
 	}
-	return PlatformIcon(platform)
+	return PlatformIconRef(platform)
 }
 
 func init() {

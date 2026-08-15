@@ -4,34 +4,39 @@ import (
 	"os"
 	"testing"
 
+	"github.com/xifan2333/dmnotifier/internal/platformicons"
 	"github.com/xifan2333/dmnotifier/plugins/transforms/format"
 )
 
-func TestPlatformLogoPNG(t *testing.T) {
-	dir := t.TempDir()
-	c, err := NewAvatarCache(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, p := range []string{"bilibili", "douyin", "xiaohongshu", "kuaishou"} {
-		url := format.PlatformIcon(p)
-		path := c.Get(url)
+func TestPlatformIconsEmbedded(t *testing.T) {
+	for _, p := range []string{"bilibili", "douyin", "xiaohongshu", "xhs", "kuaishou", "douyu", "huya"} {
+		path := platformicons.Path(p)
 		if path == "" {
-			t.Fatalf("%s empty path url=%s", p, url)
+			t.Fatalf("%s: empty path", p)
 		}
 		st, err := os.Stat(path)
 		if err != nil || st.Size() < 100 {
-			t.Fatalf("%s bad file %v", p, err)
+			t.Fatalf("%s: bad file %v", p, err)
 		}
-		// raster image (png or jpeg favicon)
-		b, _ := os.ReadFile(path)
-		if len(b) < 4 {
-			t.Fatalf("%s empty", p)
+		b, err := platformicons.Bytes(p)
+		if err != nil || len(b) < 8 || b[0] != 0x89 {
+			t.Fatalf("%s: not png", p)
 		}
-		isPNG := b[0] == 0x89 && b[1] == 0x50
-		isJPG := b[0] == 0xff && b[1] == 0xd8
-		if !isPNG && !isJPG {
-			t.Fatalf("%s not png/jpeg magic=%x", p, b[:4])
-		}
+	}
+	// no github/youtube
+	if platformicons.Path("youtube") != "" || platformicons.Path("github") != "" {
+		t.Fatal("unexpected extra platforms")
+	}
+}
+
+func TestResolveIconMarker(t *testing.T) {
+	ref := format.PlatformIconRef("bilibili")
+	p, ok := format.ParsePlatformIconRef(ref)
+	if !ok || p != "bilibili" {
+		t.Fatalf("marker %q", ref)
+	}
+	path := resolveIcon(nil, ref, "bilibili")
+	if path == "" {
+		t.Fatal("resolve empty")
 	}
 }
