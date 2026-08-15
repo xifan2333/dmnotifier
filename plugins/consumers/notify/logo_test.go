@@ -23,10 +23,15 @@ func TestPlatformLogoPNG(t *testing.T) {
 		if err != nil || st.Size() < 100 {
 			t.Fatalf("%s bad file %v", p, err)
 		}
-		// should be png
+		// raster image (png or jpeg favicon)
 		b, _ := os.ReadFile(path)
-		if len(b) < 4 || b[0] != 0x89 || b[1] != 0x50 {
-			t.Fatalf("%s not png", p)
+		if len(b) < 4 {
+			t.Fatalf("%s empty", p)
+		}
+		isPNG := b[0] == 0x89 && b[1] == 0x50
+		isJPG := b[0] == 0xff && b[1] == 0xd8
+		if !isPNG && !isJPG {
+			t.Fatalf("%s not png/jpeg magic=%x", p, b[:4])
 		}
 	}
 }

@@ -9,17 +9,22 @@ import (
 	"github.com/xifan2333/dmnotifier/pkg/models"
 )
 
-// favicon returns a PNG favicon URL for a site (works with notify-send/mako).
+// favicon returns a site favicon PNG URL (Google s2; works with notify-send).
 func favicon(domain string) string {
 	return "https://www.google.com/s2/favicons?domain=" + domain + "&sz=128"
 }
 
-// PlatformIcons maps platform id → favicon PNG (default avatar when user has none).
+// simpleIconsPNG is simple-icons rendered as real PNG (jsDelivr).
+// Used when Google favicon is missing (e.g. xiaohongshu.com → 404 placeholder).
+const simpleIconsPNG = "https://cdn.jsdelivr.net/gh/cuckcoder/simple-icons-png@main/icons/"
+
+// PlatformIcons maps platform id → default icon PNG URL.
 var PlatformIcons = map[string]string{
-	"bilibili":    favicon("bilibili.com"),
-	"douyin":      favicon("douyin.com"),
-	"xiaohongshu": favicon("xiaohongshu.com"),
-	"xhs":         favicon("xiaohongshu.com"),
+	"bilibili": favicon("bilibili.com"),
+	"douyin":   favicon("douyin.com"),
+	// Google s2 returns 404 for xhs domains; use simple-icons PNG instead.
+	"xiaohongshu": simpleIconsPNG + "xiaohongshu.png",
+	"xhs":         simpleIconsPNG + "xiaohongshu.png",
 	"kuaishou":    favicon("kuaishou.com"),
 	"douyu":       favicon("douyu.com"),
 	"huya":        favicon("huya.com"),
@@ -28,7 +33,7 @@ var PlatformIcons = map[string]string{
 }
 
 // DefaultUserAvatar generic fallback favicon.
-const DefaultUserAvatar = "https://www.google.com/s2/favicons?domain=live.com&sz=128"
+const DefaultUserAvatar = "https://www.google.com/s2/favicons?domain=github.com&sz=128"
 
 // Transform 格式化转换器
 type Transform struct {
