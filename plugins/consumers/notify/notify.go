@@ -73,14 +73,14 @@ func (c *Consumer) Consume(ctx context.Context, msg *models.Message) error {
 }
 
 // sendNotification 发送系统通知。
-// 图标优先级：用户头像 → 平台 simple-icons PNG → 无图标。
+// 图标优先级：用户头像 → 平台 favicon → 无图标。
 func (c *Consumer) sendNotification(title, message, iconURL, platform string) error {
 	iconPath := ""
 	if c.avatarCache != nil {
 		if iconURL != "" {
 			iconPath = c.avatarCache.Get(iconURL)
 		}
-		// 头像缺失或下载失败 → 平台 logo（simple-icons PNG）
+		// 头像缺失或下载失败 → 平台 favicon
 		if iconPath == "" {
 			if logo := format.PlatformIcon(platform); logo != "" && logo != iconURL {
 				iconPath = c.avatarCache.Get(logo)

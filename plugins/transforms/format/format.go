@@ -9,27 +9,26 @@ import (
 	"github.com/xifan2333/dmnotifier/pkg/models"
 )
 
-// simpleIconsPNG is the jsDelivr mirror of simple-icons rendered as PNG
-// (cdn.simpleicons.org itself only serves SVG; notify-send/mako need raster).
-const simpleIconsPNG = "https://cdn.jsdelivr.net/gh/cuckcoder/simple-icons-png@main/icons/"
-
-// PlatformIcons maps platform id → PNG logo URL (for default avatars / notify).
-var PlatformIcons = map[string]string{
-	"bilibili":    simpleIconsPNG + "bilibili.png",
-	"douyin":      simpleIconsPNG + "tiktok.png",
-	"xiaohongshu": simpleIconsPNG + "xiaohongshu.png",
-	"xhs":         simpleIconsPNG + "xiaohongshu.png",
-	"kuaishou":    simpleIconsPNG + "kuaishou.png",
-	// douyu/huya are not in simple-icons; use site favicon PNG
-	"douyu":   "https://www.google.com/s2/favicons?domain=douyu.com&sz=128",
-	"huya":    "https://www.google.com/s2/favicons?domain=huya.com&sz=128",
-	"youtube": simpleIconsPNG + "youtube.png",
-	"twitch":  simpleIconsPNG + "twitch.png",
+// favicon returns a PNG favicon URL for a site (works with notify-send/mako).
+func favicon(domain string) string {
+	return "https://www.google.com/s2/favicons?domain=" + domain + "&sz=128"
 }
 
-// DefaultUserAvatar generic fallback PNG (simple-icons "livechat"-style via twitch is ok;
-// use a neutral simple-icons entry).
-const DefaultUserAvatar = simpleIconsPNG + "livechat.png"
+// PlatformIcons maps platform id → favicon PNG (default avatar when user has none).
+var PlatformIcons = map[string]string{
+	"bilibili":    favicon("bilibili.com"),
+	"douyin":      favicon("douyin.com"),
+	"xiaohongshu": favicon("xiaohongshu.com"),
+	"xhs":         favicon("xiaohongshu.com"),
+	"kuaishou":    favicon("kuaishou.com"),
+	"douyu":       favicon("douyu.com"),
+	"huya":        favicon("huya.com"),
+	"youtube":     favicon("youtube.com"),
+	"twitch":      favicon("twitch.tv"),
+}
+
+// DefaultUserAvatar generic fallback favicon.
+const DefaultUserAvatar = "https://www.google.com/s2/favicons?domain=live.com&sz=128"
 
 // Transform 格式化转换器
 type Transform struct {
