@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	defaultBaseURL = "https://token-plan-cn.xiaomimimo.com/v1"
+	defaultBaseURL = "https://api.xiaomimimo.com/v1"
 	defaultModel   = "mimo-v2.5-tts"
 	defaultVoice   = "茉莉"
 )
