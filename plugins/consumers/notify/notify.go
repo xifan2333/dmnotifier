@@ -3,8 +3,6 @@ package notify
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/gen2brain/beeep"
 	"github.com/xifan2333/dmnotifier/internal/plugin"
@@ -39,10 +37,8 @@ func (c *Consumer) Init(ctx context.Context, config map[string]interface{}) erro
 	// 创建上下文
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 
-	// 使用系统临时目录
-	cacheDir := filepath.Join(os.TempDir(), "dmnotifier", "avatars")
-
-	avatarCache, err := NewAvatarCache(cacheDir)
+	// OS temp dir: $TMPDIR/dmnotifier-avatars (see defaultCacheDir)
+	avatarCache, err := NewAvatarCache("")
 	if err != nil {
 
 		// 继续运行，只是不缓存头像
