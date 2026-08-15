@@ -15,7 +15,7 @@ import (
 func Run() {
 	config, err := LoadConfig()
 	if err != nil {
-		config = GetDefaultConfig()
+		config = DefaultConfig()
 	}
 
 	m := NewRootModel(config)

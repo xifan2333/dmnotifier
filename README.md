@@ -28,8 +28,6 @@ yay -S dmnotifier-bin
 git clone https://github.com/xifan2333/dmnotifier.git
 cd dmnotifier
 go build -o dmnotifier ./cmd/dmnotifier
-# 兼容旧入口（仅 TUI）
-go build -o dmnotifier-tui ./cmd/dmnotifier-tui
 ```
 
 ## 使用
@@ -153,20 +151,16 @@ history:
 
 ```
 dmnotifier/
-├── cmd/
-│   └── dmnotifier-tui/     # TUI 客户端入口
+├── cmd/dmnotifier/          # 唯一入口：TUI + CLI
 ├── internal/
-│   ├── client/              # WebSocket 和 API 客户端
-│   ├── pipeline/            # 消息处理管道
-│   ├── plugin/              # 插件系统核心
-│   └── tui/                 # TUI 界面
-├── plugins/
-│   ├── consumers/           # 消费者插件
-│   ├── filters/             # 过滤器插件
-│   └── transforms/          # 转换器插件
-└── pkg/
-    ├── api/                 # UniBarrage API 客户端
-    └── models/              # 数据模型
+│   ├── config/              # 默认本地 UniBarrage 地址
+│   ├── subscribe/           # 多路订阅
+│   ├── client/              # WS / HTTP
+│   ├── pipeline/            # 消息管道
+│   ├── plugin/              # 插件核心
+│   └── tui/                 # TUI
+├── plugins/                 # consumers / filters / transforms
+└── pkg/                     # api + models
 ```
 
 ## 开发
@@ -176,7 +170,7 @@ dmnotifier/
 1. 在 `plugins/consumers/` 创建插件目录
 2. 实现 `plugin.ConsumerPlugin` 接口
 3. 在 `init()` 中注册插件
-4. 在 `cmd/dmnotifier-tui/main.go` 中导入插件
+4. 在 `cmd/dmnotifier/main.go` 中导入插件
 
 示例:
 

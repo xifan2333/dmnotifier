@@ -21,7 +21,7 @@ type RootModel struct {
 	pluginsConfig popups.PluginsConfigModel
 
 	// 当前连接（多路）
-	selectedService *api.Service // 最近连接的一个，兼容旧 UI
+	selectedService *api.Service // 最近连接的一个
 	connectedKeys   []string     // platform/rid 列表
 
 	// 配置

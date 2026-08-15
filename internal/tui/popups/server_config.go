@@ -19,9 +19,9 @@ func NewServerConfig() ServerConfigModel {
 	return ServerConfigModel{
 		visible: false,
 		inputs: [3]components.FormInputModel{
-			components.NewFormInput("API Address", "https://example.com", 200),
-			components.NewPasswordInput("API Token", "your-token", 200),
-			components.NewFormInput("WS Address", "ws://example.com:7777", 200),
+			components.NewFormInput("API Address", "http://127.0.0.1:8080", 200),
+			components.NewPasswordInput("API Token", "(optional)", 200),
+			components.NewFormInput("WS Address", "ws://127.0.0.1:7777", 200),
 		},
 		focusedIndex: 0,
 	}
