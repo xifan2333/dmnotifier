@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	tuimsg "github.com/xifan2333/dmnotifier/internal/common"
 	"github.com/xifan2333/dmnotifier/internal/plugin"
@@ -39,63 +40,94 @@ type PipelineConfig struct {
 	Plugins []tuimsg.PluginConfig `yaml:"plugins"`
 }
 
-// GetConfigPath 获取配置文件路径
-func GetConfigPath() (string, error) {
+// ConfigDir returns the application config directory.
+//
+// Linux / macOS (XDG Base Directory):
+//
+//	$XDG_CONFIG_HOME/dmnotifier  or  $HOME/.config/dmnotifier
+//
+// Windows:
+//
+//	%AppData%/dmnotifier
+func ConfigDir() (string, error) {
+	if runtime.GOOS == "windows" {
+		if appData := os.Getenv("AppData"); appData != "" {
+			return filepath.Join(appData, "dmnotifier"), nil
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("home directory: %w", err)
+		}
+		return filepath.Join(home, "AppData", "Roaming", "dmnotifier"), nil
+	}
+
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, "dmnotifier"), nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
+		return "", fmt.Errorf("home directory: %w", err)
 	}
-	return filepath.Join(home, ".dmnotifier", "config.yaml"), nil
+	return filepath.Join(home, ".config", "dmnotifier"), nil
+}
+
+// GetConfigPath returns <ConfigDir>/config.yaml
+func GetConfigPath() (string, error) {
+	dir, err := ConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "config.yaml"), nil
 }
 
 func ensureConfigDir() error {
-	home, err := os.UserHomeDir()
+	dir, err := ConfigDir()
 	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+		return err
 	}
-	return os.MkdirAll(filepath.Join(home, ".dmnotifier"), 0755)
+	return os.MkdirAll(dir, 0o755)
 }
 
-// Load 加载配置
+// Load reads config.yaml from the XDG path. Missing file → Default().
 func Load() (*AppConfig, error) {
-	configFile, err := GetConfigPath()
+	path, err := GetConfigPath()
 	if err != nil {
 		return nil, err
 	}
-	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return Default(), nil
 	}
-	data, err := os.ReadFile(configFile)
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, fmt.Errorf("read config: %w", err)
 	}
-	var config AppConfig
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	var cfg AppConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parse config: %w", err)
 	}
-	return &config, nil
+	return &cfg, nil
 }
 
-// Save 保存配置
-func Save(config *AppConfig) error {
+// Save writes config.yaml under the XDG config directory.
+func Save(cfg *AppConfig) error {
 	if err := ensureConfigDir(); err != nil {
 		return err
 	}
-	configFile, err := GetConfigPath()
+	path, err := GetConfigPath()
 	if err != nil {
 		return err
 	}
-	data, err := yaml.Marshal(config)
+	data, err := yaml.Marshal(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
+		return fmt.Errorf("marshal config: %w", err)
 	}
-	if err := os.WriteFile(configFile, data, 0644); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("write config: %w", err)
 	}
 	return nil
 }
 
-// Default 默认配置
+// Default is the built-in config (local UniBarrage).
 func Default() *AppConfig {
 	return &AppConfig{
 		Server: ServerConfig{
@@ -117,18 +149,18 @@ func loadPluginConfigs() []tuimsg.PluginConfig {
 	pluginInfos := plugin.GlobalRegistry.GetAllConsumerPluginInfo()
 	configs := make([]tuimsg.PluginConfig, 0, len(pluginInfos))
 	for _, info := range pluginInfos {
-		var cfg map[string]interface{}
+		var c map[string]interface{}
 		if len(info.ConfigTemplate) > 0 {
-			cfg = make(map[string]interface{})
+			c = make(map[string]interface{})
 			for _, field := range info.ConfigTemplate {
-				cfg[field.Name] = field.Default
+				c[field.Name] = field.Default
 			}
 		}
 		configs = append(configs, tuimsg.PluginConfig{
 			Name:         info.Name,
 			Enabled:      true,
 			MessageTypes: append([]string{}, AvailableMessageTypes...),
-			Config:       cfg,
+			Config:       c,
 		})
 	}
 	return configs

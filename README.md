@@ -79,7 +79,7 @@ go build -o dmnotifier ./cmd/dmnotifier
 
 ### 配置文件
 
-路径：`~/.dmnotifier/config.yaml`
+路径（XDG）：`$XDG_CONFIG_HOME/dmnotifier/config.yaml`（默认 `~/.config/dmnotifier/config.yaml`）
 
 ```yaml
 server:
