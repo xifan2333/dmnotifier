@@ -11,6 +11,8 @@ import (
 
 type AddServiceModel struct {
 	visible        bool
+	editMode       bool
+	editOrigin     tuimsg.ServiceHistoryEntry
 	platforms      []string
 	platformCursor int
 	inputs         [2]components.FormInputModel // RID, Cookie
@@ -40,17 +42,48 @@ func (m AddServiceModel) Update(msg tea.Msg) (AddServiceModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tuimsg.ShowAddServicePopupMsg:
 		m.visible = true
+		m.editMode = false
+		m.editOrigin = tuimsg.ServiceHistoryEntry{}
 		m.step = 0
 		m.platformCursor = 0
 		m.inputs[0].SetValue("")
 		m.inputs[1].SetValue("")
 		return m, nil
 
+	case tuimsg.ShowEditHistoryPopupMsg:
+		// 编辑历史记录：预填平台/RID/Cookie
+		m.editMode = true
+		m.editOrigin = msg.Entry
+		// 确保平台在列表中可选，否则追加
+		idx := -1
+		for i, p := range m.platforms {
+			if p == msg.Entry.Platform {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			m.platforms = append(m.platforms, msg.Entry.Platform)
+			idx = len(m.platforms) - 1
+		}
+		m.platformCursor = idx
+		m.inputs[0].SetValue(msg.Entry.RID)
+		m.inputs[1].SetValue(msg.Entry.Cookie)
+		m.visible = true
+		// 直接进入 RID 编辑
+		m.step = 1
+		m.inputs[0].Focus()
+		m.inputs[0].StartEdit()
+		return m, nil
+
 	case tuimsg.HidePopupMsg:
 		m.visible = false
+		m.editMode = false
+		m.editOrigin = tuimsg.ServiceHistoryEntry{}
 		m.step = 0
 		for i := range m.inputs {
 			m.inputs[i].Blur()
+			m.inputs[i].StopEdit()
 		}
 		return m, nil
 
@@ -134,6 +167,21 @@ func (m AddServiceModel) Update(msg tea.Msg) (AddServiceModel, tea.Cmd) {
 					m.inputs[i].StopEdit()
 				}
 
+				if m.editMode {
+					origin := m.editOrigin
+					m.editMode = false
+					m.editOrigin = tuimsg.ServiceHistoryEntry{}
+					return m, func() tea.Msg {
+						return tuimsg.UpdateHistoryEntryRequestMsg{
+							OldPlatform: origin.Platform,
+							OldRID:      origin.RID,
+							Platform:    platform,
+							RID:         rid,
+							Cookie:      cookie,
+						}
+					}
+				}
+
 				return m, func() tea.Msg {
 					return tuimsg.AddServiceRequestMsg{
 						Platform: platform,
@@ -187,6 +235,9 @@ func (m AddServiceModel) View() string {
 		Foreground(dimColor)
 
 	header := headerStyle.Render("Add Service")
+	if m.editMode {
+		header = headerStyle.Render("Edit History")
+	}
 
 	var lines []string
 

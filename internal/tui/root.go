@@ -289,7 +289,7 @@ func (m RootModel) View() string {
 			shown = append(shown[:4], fmt.Sprintf("+%d more", len(m.connectedKeys)-4))
 		}
 		connectionInfo = infoStyle.Width(m.width).Render(
-			fmt.Sprintf("Connected (%d): %s", len(m.connectedKeys), joinComma(shown)),
+			fmt.Sprintf("Connected: %s", joinComma(shown)),
 		)
 	}
 
@@ -300,7 +300,7 @@ func (m RootModel) View() string {
 	status := statusStyle.Width(m.width).Render(m.statusMessage)
 
 	// 帮助栏
-	help := helpStyle.Width(m.width).Render("a:Add | s:Services(multi) | c:Config | p:Plugins | r:Refresh | d:DisconnectAll | q:Quit")
+	help := helpStyle.Width(m.width).Render("a:Add | s:Services | c:Config | p:Plugins | r:Refresh | d:DisconnectAll | q:Quit")
 
 	mainView := lipgloss.JoinVertical(
 		lipgloss.Left,

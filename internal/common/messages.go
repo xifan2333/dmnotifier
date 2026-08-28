@@ -17,6 +17,11 @@ type ShowPluginsConfigPopupMsg struct {
 	Plugins []PluginConfig
 }
 type ShowAddServicePopupMsg struct{}
+
+type ShowEditHistoryPopupMsg struct {
+	Entry ServiceHistoryEntry
+}
+
 type HidePopupMsg struct{}
 
 // ServiceHistoryEntry 历史使用过的服务记录
@@ -102,6 +107,15 @@ type ReuseHistoryRequestMsg struct {
 type DeleteHistoryEntryRequestMsg struct {
 	Platform string
 	RID      string
+}
+
+// UpdateHistoryEntryRequestMsg 更新一条历史记录（用新值替换原 key 对应的条目）
+type UpdateHistoryEntryRequestMsg struct {
+	OldPlatform string
+	OldRID      string
+	Platform    string
+	RID         string
+	Cookie      string
 }
 
 // 状态消息类型

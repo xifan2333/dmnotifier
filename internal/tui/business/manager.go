@@ -50,6 +50,25 @@ func (m *Manager) removeFromHistory(platform, rid string) {
 	m.config.History = filtered
 }
 
+// UpdateHistoryEntry 替换历史中指定 key 的条目（未命中则追加）
+func (m *Manager) UpdateHistoryEntry(oldPlatform, oldRID, platform, rid, cookie string) {
+	platform = normalizePlatform(platform)
+	updated := false
+	next := make([]tuimsg.ServiceHistoryEntry, 0, len(m.config.History)+1)
+	for _, h := range m.config.History {
+		if h.Platform == oldPlatform && h.RID == oldRID {
+			next = append(next, tuimsg.ServiceHistoryEntry{Platform: platform, RID: rid, Cookie: cookie})
+			updated = true
+			continue
+		}
+		next = append(next, h)
+	}
+	if !updated {
+		next = append(next, tuimsg.ServiceHistoryEntry{Platform: platform, RID: rid, Cookie: cookie})
+	}
+	m.config.History = next
+}
+
 func (m *Manager) newSub() *subscribe.Manager {
 	cfg := m.config
 	prog := m.program
@@ -225,6 +244,20 @@ func (m *Manager) DeleteFromHistory(platform, rid string) tea.Cmd {
 	return func() tea.Msg {
 		m.removeFromHistory(platform, rid)
 		m.program.Send(tuimsg.SaveConfigRequestMsg{})
+		services, err := m.sub.API().GetAllServices()
+		if err != nil {
+			return tuimsg.ServicesLoadedMsg{Services: nil, History: m.config.History, Connected: m.connectedKeys()}
+		}
+		return tuimsg.ServicesLoadedMsg{Services: services, History: m.config.History, Connected: m.connectedKeys()}
+	}
+}
+
+// UpdateHistoryEntryFromReq 更新一条历史记录并写配置
+func (m *Manager) UpdateHistoryEntryFromReq(oldPlatform, oldRID, platform, rid, cookie string) tea.Cmd {
+	return func() tea.Msg {
+		m.UpdateHistoryEntry(oldPlatform, oldRID, platform, rid, cookie)
+		m.program.Send(tuimsg.SaveConfigRequestMsg{})
+		m.program.Send(tuimsg.StatusMsg{Message: fmt.Sprintf("History %s/%s updated", platform, rid)})
 		services, err := m.sub.API().GetAllServices()
 		if err != nil {
 			return tuimsg.ServicesLoadedMsg{Services: nil, History: m.config.History, Connected: m.connectedKeys()}

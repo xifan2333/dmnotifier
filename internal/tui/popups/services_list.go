@@ -138,6 +138,17 @@ func (m ServicesPopupModel) Update(msg tea.Msg) (ServicesPopupModel, tea.Cmd) {
 			return m, func() tea.Msg {
 				return tuimsg.StopServiceRequestMsg{Platform: service.Platform, RID: service.RID}
 			}
+
+		case "e", "edit":
+			// 编辑历史记录
+			if total == 0 || !m.isHistoryCursor() {
+				return m, nil
+			}
+			entry := m.history[m.historyIndex()]
+			m.visible = false
+			return m, func() tea.Msg {
+				return tuimsg.ShowEditHistoryPopupMsg{Entry: entry}
+			}
 		}
 	}
 
@@ -229,7 +240,7 @@ func (m ServicesPopupModel) View() string {
 
 	var helpText string
 	if m.isHistoryCursor() && len(m.history) > 0 {
-		helpText = "Up/Down: Select | Enter: Reconnect | x: Remove from history | Esc: Close"
+		helpText = "Up/Down: Select | Enter: Reconnect | e: Edit | x: Remove from history | Esc: Close"
 	} else {
 		helpText = "Up/Down: Select | Enter: Subscribe(+multi) | x: Stop remote | Esc: Close"
 	}

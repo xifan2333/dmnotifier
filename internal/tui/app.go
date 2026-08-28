@@ -124,6 +124,9 @@ func (m *businessLogicMiddleware) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tuimsg.DeleteHistoryEntryRequestMsg:
 		cmds = append(cmds, m.mgr.DeleteFromHistory(msg.Platform, msg.RID))
 
+	case tuimsg.UpdateHistoryEntryRequestMsg:
+		cmds = append(cmds, m.mgr.UpdateHistoryEntryFromReq(msg.OldPlatform, msg.OldRID, msg.Platform, msg.RID, msg.Cookie))
+
 	case tuimsg.SaveConfigRequestMsg:
 		m.scheduleSave()
 
