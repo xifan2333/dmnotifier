@@ -6,9 +6,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	tuimsg "github.com/xifan2333/dmnotifier/internal/common"
+	"github.com/xifan2333/dmnotifier/internal/config"
 	"github.com/xifan2333/dmnotifier/internal/pipeline"
 	"github.com/xifan2333/dmnotifier/internal/plugin"
-	"github.com/xifan2333/dmnotifier/internal/config"
 )
 
 // BuildPipelines 根据配置构建所有 pipeline
@@ -39,6 +39,11 @@ func buildPipelineForConsumer(ctx context.Context, pluginCfg tuimsg.PluginConfig
 	p := pipeline.NewPipeline(pipeline.PipelineConfig{
 		Name:    fmt.Sprintf("%s_pipeline", pluginCfg.Name),
 		Enabled: true,
+		OnError: func(err error) {
+			if program != nil {
+				program.Send(tuimsg.ErrorMsg{Err: err})
+			}
+		},
 	})
 
 	// 1. 添加消息类型过滤器
@@ -90,12 +95,23 @@ func buildPipelineForConsumer(ctx context.Context, pluginCfg tuimsg.PluginConfig
 	}
 
 	// 为 TUI 插件传入 program 实例
-	config := pluginCfg.Config
+	config := make(map[string]interface{}, len(pluginCfg.Config)+1)
+	for key, value := range pluginCfg.Config {
+		config[key] = value
+	}
 	if pluginCfg.Name == "tui" {
 		if config == nil {
 			config = make(map[string]interface{})
 		}
 		config["program"] = program
+	}
+
+	if pluginCfg.Name == "tts" {
+		config["on_error"] = func(err error) {
+			if program != nil {
+				program.Send(tuimsg.ErrorMsg{Err: err})
+			}
+		}
 	}
 
 	if err := consumer.Init(ctx, config); err != nil {

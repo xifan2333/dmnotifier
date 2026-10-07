@@ -119,13 +119,35 @@ history:
 在终端界面显示弹幕消息，支持平台品牌色标签和时间戳。
 
 #### Notify 插件
-发送系统通知，支持头像缓存。
+发送系统通知前，先取得用户头像并转换为最大 256×256 的 PNG，首次通知也使用头像；后续直接复用缓存，同一头像的并发请求共享下载与转换。无头像或处理失败时使用平台图标，下载超时为 10 秒，失败后一分钟再尝试。头像处理在独立通知任务中执行，不阻塞 TUI 或语音。发送失败会在 TUI 状态栏显示错误。
 
 #### TTS 插件
-语音播报弹幕消息，基于 Edge TTS。
+支持 MiMo（默认）和 Edge 实时流式播报。在插件配置中选中「Speech engine」按 Enter 打开选单，上下键选择、Enter 确认。界面显示 Speech engine、Voice 和 Playback queue size，MiMo 额外显示 API key；模型和 API 地址保留在配置文件中，不在界面展示。切换时保留另一套设置；修改后重新连接订阅生效。MiMo 的 `voice` 和 Edge 的 `edge_voice` 分别保存，Edge 不需要 API Key。
+
+音色也通过选单选择，不提供自定义输入。界面使用英文，音色选单仅显示中文：MiMo 的 4 个中文预置音色，以及 Edge 上游列表中的 14 个中文音色（含大陆、香港、台湾及方言），离线也可选择。输入音色名、语言代码（如 `zh-CN`、`zh-HK`）或 `Male` / `Female` 筛选，Ctrl+U 清空筛选，Esc 取消并返回配置列表。
+
+```yaml
+      config:
+        provider: mimo            # mimo | edge
+        api_key: "你的 MiMo API Key" # 仅 MiMo 必需
+        base_url: https://api.xiaomimimo.com/v1
+        model: mimo-v2.5-tts
+        voice: 茉莉
+        edge_voice: zh-CN-XiaoxiaoNeural
+        queue_size: 100
+```
+
+MiMo 使用 SSE PCM16（24kHz、单声道），Edge 使用流式 MP3，收到音频即可持续送入同一个播放器。MiMo 的用户名和正文并行请求、顺序播放，正文开头的语气标签保持原样；Edge 将用户名和正文合为一次请求。MiMo 用户名音频使用最多 8MiB 的内存 LRU 缓存（单项含键最多 256KiB）；正文受背压限制，不积攒整句。播放队列满时，后台语音消费任务等待空位，不再静默丢弃；停止订阅会取消等待。持续消息多于播报速度时，等待任务和延迟会累积。排队时保存文本，仅当前播报开启网络流。
+
+停止订阅会取消请求并关闭播放器；流中途失败会停止当前播报并在状态栏显示错误，不从头重播。每段请求设有两分钟上限。播放器使用约 100ms 音频缓冲，实际起声还取决于首包大小、解码器和声卡缓冲；首包到起声以 200ms 内为优化目标，不保证云端及网络总延迟。
+
+诊断：TTS 通过 `slog.Debug` 输出 `headers`（MiMo 响应头）、`first_packet`（首段解码音频）、`request`（请求至流结束，包含背压等待）和 `first_write`（首段音频收到至首次写入播放器）的耗时。嵌入使用时也可通过 `on_timing: func(tts.Timing)` 接收；回调可能并发调用，应快速返回；`phase` 区分合成结束和首次交付两类记录。`first_write` 仅代表交付播放器，并非声卡实际起声时间；正文的该值包含等待前缀的时间。
+
+详细测量与验证范围见 [流式播报验证记录](docs/tts-streaming-validation.md)。
 
 **系统依赖**:
-- macOS: afplay (系统自带)
+- macOS: mpv 或 ffplay 支持流式；只有系统自带 afplay 时回退为整段文件播放
+- Windows: mpv 或 ffplay，需在 PATH 中
 - Linux: mpv 或 ffplay
   ```bash
   # Arch Linux

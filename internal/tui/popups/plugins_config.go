@@ -31,6 +31,9 @@ type PluginsConfigModel struct {
 	pluginEditingTypes bool // 是否正在编辑消息类型
 	pluginTypesCursor  int  // 消息类型列表光标
 
+	enumSelecting      bool
+	enumCursor         int
+	enumQuery          string
 	pluginEditingField int                       // 正在编辑的字段索引 (-1 表示未编辑)
 	pluginConfigInput  components.FormInputModel // 配置字段输入框
 
@@ -99,10 +102,12 @@ func (m PluginsConfigModel) Update(msg tea.Msg) (PluginsConfigModel, tea.Cmd) {
 		m.pluginItemCursor = 0
 		m.pluginEditingTypes = false
 		m.pluginEditingField = -1
+		m.enumSelecting = false
 		return m, nil
 
 	case tuimsg.HidePopupMsg:
 		m.visible = false
+		m.enumSelecting = false
 		m.pluginEditingTypes = false
 		m.pluginEditingField = -1
 		m.pluginConfigInput.Blur()
@@ -126,6 +131,9 @@ func (m PluginsConfigModel) Update(msg tea.Msg) (PluginsConfigModel, tea.Cmd) {
 
 // handleKeyPress 处理按键
 func (m PluginsConfigModel) handleKeyPress(msg tea.KeyMsg) (PluginsConfigModel, tea.Cmd) {
+	if m.enumSelecting {
+		return m.handleEnumSelection(msg)
+	}
 	// 如果正在编辑某个字段
 	if m.pluginEditingField >= 0 {
 		return m.handleFieldEditing(msg)
@@ -147,7 +155,7 @@ func (m PluginsConfigModel) handleFieldEditing(msg tea.KeyMsg) (PluginsConfigMod
 	}
 
 	pluginCfg := &m.plugins[m.pluginCursor]
-	template := getPluginConfigTemplate(pluginCfg.Name)
+	template := visiblePluginFields(*pluginCfg)
 
 	if m.pluginEditingField >= len(template) {
 		m.pluginEditingField = -1
@@ -310,7 +318,7 @@ func (m PluginsConfigModel) handleNavigation(msg tea.KeyMsg) (PluginsConfigModel
 		}
 
 		pluginCfg := &m.plugins[m.pluginCursor]
-		template := getPluginConfigTemplate(pluginCfg.Name)
+		template := visiblePluginFields(*pluginCfg)
 
 		switch m.pluginItemCursor {
 		case 0:
@@ -331,7 +339,23 @@ func (m PluginsConfigModel) handleNavigation(msg tea.KeyMsg) (PluginsConfigModel
 			if fieldIdx < len(template) {
 				field := template[fieldIdx]
 
+				if pluginCfg.Config == nil {
+					pluginCfg.Config = make(map[string]interface{})
+				}
 				switch field.Type {
+				case plugin.FieldTypeEnum:
+					m.pluginEditingField = fieldIdx
+					m.enumSelecting = true
+					m.enumQuery = ""
+					m.enumCursor = 0
+					current := fieldValue(*pluginCfg, field)
+					for i, value := range field.Options {
+						if value == current {
+							m.enumCursor = i
+							break
+						}
+					}
+					return m, nil
 				case plugin.FieldTypeBool:
 					// Bool 类型直接切换
 					if val, ok := pluginCfg.Config[field.Name].(bool); ok {
@@ -348,7 +372,11 @@ func (m PluginsConfigModel) handleNavigation(msg tea.KeyMsg) (PluginsConfigModel
 
 				case plugin.FieldTypeString, plugin.FieldTypeNumber:
 					// String/Number 类型进入输入模式
-					currentVal := fmt.Sprintf("%v", pluginCfg.Config[field.Name])
+					value := pluginCfg.Config[field.Name]
+					if value == nil {
+						value = field.Default
+					}
+					currentVal := fmt.Sprintf("%v", value)
 					m.pluginConfigInput.SetValue(currentVal)
 					m.pluginConfigInput.Focus()
 					m.pluginConfigInput.StartEdit()
@@ -387,7 +415,9 @@ func (m PluginsConfigModel) View() string {
 	header := m.headerStyle.Width(width - 4).Render("Plugins Config")
 
 	var content string
-	if m.pluginEditingTypes {
+	if m.enumSelecting {
+		content = m.renderEnumSelector()
+	} else if m.pluginEditingTypes {
 		// 显示消息类型编辑界面
 		content = m.renderMessageTypesEditor()
 	} else {
@@ -396,7 +426,9 @@ func (m PluginsConfigModel) View() string {
 	}
 
 	var help string
-	if m.pluginEditingTypes {
+	if m.enumSelecting {
+		help = m.dimStyle.Render("Up/Down: Select | Type: Filter | Enter: Confirm | Esc: Cancel")
+	} else if m.pluginEditingTypes {
 		help = m.dimStyle.Render("Up/Down: Navigate | Space: Toggle | Esc: Back")
 	} else {
 		help = m.dimStyle.Render("Up/Down: Navigate | Space: Toggle Enable | Enter: Edit | Esc: Close")
@@ -427,7 +459,7 @@ func (m PluginsConfigModel) getPluginItemCount() int {
 	if m.pluginCursor >= len(m.plugins) {
 		return 0
 	}
-	template := getPluginConfigTemplate(m.plugins[m.pluginCursor].Name)
+	template := visiblePluginFields(m.plugins[m.pluginCursor])
 	// 0=name, 1=types, 2+=config fields
 	return 2 + len(template)
 }
@@ -448,7 +480,7 @@ func (m PluginsConfigModel) renderPluginsList() string {
 	var items []string
 
 	for i, pluginCfg := range m.plugins {
-		template := getPluginConfigTemplate(pluginCfg.Name)
+		template := visiblePluginFields(pluginCfg)
 
 		// 插件名行
 		cursor := "  "
@@ -518,10 +550,13 @@ func (m PluginsConfigModel) renderPluginsList() string {
 			}
 
 			value := pluginCfg.Config[field.Name]
+			if value == nil {
+				value = field.Default
+			}
 
 			// 如果当前字段正在编辑，单独渲染输入框
 			if i == m.pluginCursor && m.pluginEditingField == fieldIdx && m.pluginConfigInput.IsEditing {
-				label := fmt.Sprintf("%s%s: ", cursor, field.Name)
+				label := fmt.Sprintf("%s%s: ", cursor, fieldLabel(field))
 				line := m.selectedStyle.Render(label) + m.pluginConfigInput.View()
 				items = append(items, line)
 			} else {
@@ -534,6 +569,8 @@ func (m PluginsConfigModel) renderPluginsList() string {
 					} else {
 						valueStr = "[ ]"
 					}
+				case plugin.FieldTypeEnum:
+					valueStr = optionLabel(field, fmt.Sprint(value))
 				case plugin.FieldTypeNumber:
 					valueStr = fmt.Sprintf("%v", value)
 				case plugin.FieldTypeString:
@@ -545,7 +582,7 @@ func (m PluginsConfigModel) renderPluginsList() string {
 					valueStr = fmt.Sprintf("%v", value)
 				}
 
-				line := fmt.Sprintf("%s%s: %s", cursor, field.Name, valueStr)
+				line := fmt.Sprintf("%s%s: %s", cursor, fieldLabel(field), valueStr)
 				if i == m.pluginCursor && m.pluginItemCursor == itemIdx {
 					items = append(items, m.selectedStyle.Render(line))
 				} else {

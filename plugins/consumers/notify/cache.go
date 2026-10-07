@@ -1,23 +1,48 @@
 package notify
 
 import (
+	"bytes"
+	"context"
 	"crypto/md5"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	"image/png"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/image/draw"
+	_ "golang.org/x/image/webp"
 )
 
-// AvatarCache 头像缓存管理器
+const (
+	maxAvatarBytes   = 8 << 20
+	maxAvatarPixels  = 16 << 20
+	avatarIconSize   = 256
+	avatarRetryDelay = time.Minute
+)
+
+type avatarLoad struct {
+	done chan struct{}
+	path string
+}
+
+// AvatarCache stores validated PNG thumbnails, regardless of the source format.
 type AvatarCache struct {
 	cacheDir   string
 	httpClient *http.Client
-	mu         sync.RWMutex
-	cache      map[string]string // URL -> 本地路径
+	mu         sync.Mutex
+	cache      map[string]string
+	pending    map[string]*avatarLoad
+	retryAfter map[string]time.Time
+	ctx        context.Context
+	cancel     context.CancelFunc
+	workers    sync.WaitGroup
 }
 
 // defaultCacheDir uses the OS temp dir: $TMPDIR/dmnotifier/avatars
@@ -25,7 +50,6 @@ func defaultCacheDir() string {
 	return filepath.Join(os.TempDir(), "dmnotifier", "avatars")
 }
 
-// NewAvatarCache 创建头像缓存管理器
 func NewAvatarCache(cacheDir string) (*AvatarCache, error) {
 	if cacheDir == "" {
 		cacheDir = defaultCacheDir()
@@ -33,108 +57,110 @@ func NewAvatarCache(cacheDir string) (*AvatarCache, error) {
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create cache dir: %w", err)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	return &AvatarCache{
-		cacheDir: cacheDir,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
-		cache: make(map[string]string),
+		cacheDir:   cacheDir,
+		httpClient: &http.Client{Timeout: 10 * time.Second},
+		cache:      make(map[string]string),
+		pending:    make(map[string]*avatarLoad),
+		retryAfter: make(map[string]time.Time),
+		ctx:        ctx,
+		cancel:     cancel,
 	}, nil
 }
 
-// Get 获取头像本地路径（不存在则下载）
+// cachedPath requires a.mu to be held.
+func (a *AvatarCache) cachedPath(avatarURL string) string {
+	if path := a.cache[avatarURL]; path != "" {
+		if st, err := os.Stat(path); err == nil && st.Mode().IsRegular() {
+			return path
+		}
+		delete(a.cache, avatarURL)
+	}
+	return ""
+}
+
+// Get converts an avatar once, then reuses its PNG across messages and restarts.
+// Concurrent requests for the same URL share the download and conversion.
+// An empty result tells the consumer to use the embedded platform icon.
+// The notification worker waits here so even the first message uses the avatar.
 func (a *AvatarCache) Get(avatarURL string) string {
 	if avatarURL == "" {
 		return ""
 	}
 
-	a.mu.RLock()
-	if localPath, ok := a.cache[avatarURL]; ok {
-		a.mu.RUnlock()
-		if _, err := os.Stat(localPath); err == nil {
-			return localPath
-		}
-		// stale map entry — fall through to re-download
-	} else {
-		a.mu.RUnlock()
-	}
-
-	localPath, err := a.download(avatarURL)
-	if err != nil {
+	a.mu.Lock()
+	if a.ctx.Err() != nil || time.Now().Before(a.retryAfter[avatarURL]) {
+		a.mu.Unlock()
 		return ""
 	}
-
-	a.mu.Lock()
-	a.cache[avatarURL] = localPath
-	a.mu.Unlock()
-	return localPath
-}
-
-func extFromURLOrCT(avatarURL, contentType string) string {
-	// content-type first
-	ct := strings.ToLower(contentType)
-	switch {
-	case strings.Contains(ct, "jpeg"), strings.Contains(ct, "jpg"):
-		return ".jpg"
-	case strings.Contains(ct, "png"):
-		return ".png"
-	case strings.Contains(ct, "webp"):
-		return ".webp"
-	case strings.Contains(ct, "gif"):
-		return ".gif"
-	case strings.Contains(ct, "svg"):
-		return ".svg"
+	if path := a.cachedPath(avatarURL); path != "" {
+		a.mu.Unlock()
+		return path
 	}
-
-	u := strings.ToLower(strings.Split(avatarURL, "?")[0])
-	for _, ext := range []string{".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"} {
-		if strings.HasSuffix(u, ext) {
-			if ext == ".jpeg" {
-				return ".jpg"
-			}
-			return ext
+	if load, ok := a.pending[avatarURL]; ok {
+		a.mu.Unlock()
+		select {
+		case <-load.done:
+			return load.path
+		case <-a.ctx.Done():
+			return ""
 		}
 	}
-	// sniff later; default jpg (common for live avatars)
-	return ".jpg"
+	load := &avatarLoad{done: make(chan struct{})}
+	a.pending[avatarURL] = load
+	a.workers.Add(1)
+	a.mu.Unlock()
+	defer a.workers.Done()
+
+	path, err := a.load(avatarURL)
+	a.mu.Lock()
+	if err == nil {
+		load.path = path
+		a.cache[avatarURL] = path
+		delete(a.retryAfter, avatarURL)
+	} else {
+		a.retryAfter[avatarURL] = time.Now().Add(avatarRetryDelay)
+	}
+	delete(a.pending, avatarURL)
+	close(load.done)
+	a.mu.Unlock()
+	return load.path
 }
 
-func sniffExt(head []byte) string {
-	if len(head) >= 3 && head[0] == 0xff && head[1] == 0xd8 && head[2] == 0xff {
-		return ".jpg"
-	}
-	if len(head) >= 8 && head[0] == 0x89 && head[1] == 0x50 && head[2] == 0x4e && head[3] == 0x47 {
-		return ".png"
-	}
-	if len(head) >= 4 && head[0] == 0x47 && head[1] == 0x49 && head[2] == 0x46 {
-		return ".gif"
-	}
-	if len(head) >= 12 && string(head[0:4]) == "RIFF" && string(head[8:12]) == "WEBP" {
-		return ".webp"
-	}
-	s := strings.TrimSpace(string(head))
-	if strings.HasPrefix(s, "<svg") || strings.HasPrefix(s, "<?xml") {
-		return ".svg"
-	}
-	return ""
-}
-
-func (a *AvatarCache) download(avatarURL string) (string, error) {
+func (a *AvatarCache) load(avatarURL string) (string, error) {
 	hash := md5.Sum([]byte(avatarURL))
 	id := fmt.Sprintf("%x", hash)
-
-	// reuse any existing extension for this hash
-	if matches, _ := filepath.Glob(filepath.Join(a.cacheDir, id+".*")); len(matches) > 0 {
-		return matches[0], nil
+	// Separate normalized files from legacy downloads, including old .png files.
+	localPath := filepath.Join(a.cacheDir, id+".notify.png")
+	if file, err := os.Open(localPath); err == nil {
+		_, format, err := decodeAvatar(file)
+		file.Close()
+		if err == nil && format == "png" {
+			return localPath, nil
+		}
 	}
 
-	req, err := http.NewRequest(http.MethodGet, avatarURL, nil)
+	// Migrate completed legacy downloads without fetching the avatar again.
+	// Never return raw images or unfinished .part files to a notification daemon.
+	for _, ext := range []string{".jpg", ".jpeg", ".png", ".webp", ".gif"} {
+		file, err := os.Open(filepath.Join(a.cacheDir, id+ext))
+		if err != nil {
+			continue
+		}
+		path, err := a.storePNG(localPath, file)
+		file.Close()
+		if err == nil {
+			return path, nil
+		}
+	}
+
+	req, err := http.NewRequestWithContext(a.ctx, http.MethodGet, avatarURL, nil)
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) dmnotifier/1.1")
-	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
-
+	req.Header.Set("Accept", "image/png,image/jpeg,image/webp,image/gif")
 	resp, err := a.httpClient.Do(req)
 	if err != nil {
 		return "", err
@@ -143,42 +169,74 @@ func (a *AvatarCache) download(avatarURL string) (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("bad status: %s", resp.Status)
 	}
+	return a.storePNG(localPath, resp.Body)
+}
 
-	// read a bit for sniff + rest
-	head := make([]byte, 512)
-	n, _ := io.ReadFull(resp.Body, head)
-	head = head[:n]
-	ext := sniffExt(head)
-	if ext == "" {
-		ext = extFromURLOrCT(avatarURL, resp.Header.Get("Content-Type"))
+func decodeAvatar(r io.Reader) (image.Image, string, error) {
+	data, err := io.ReadAll(io.LimitReader(r, maxAvatarBytes+1))
+	if err != nil {
+		return nil, "", err
 	}
-	// mako/notify often weak on svg — skip caching pure svg as icon if possible
-	if ext == ".svg" {
-		// still save; notify may ignore, but better than wrong .png
+	if len(data) > maxAvatarBytes {
+		return nil, "", fmt.Errorf("avatar exceeds %d bytes", maxAvatarBytes)
 	}
+	config, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, "", err
+	}
+	if config.Width <= 0 || config.Height <= 0 || config.Width > maxAvatarPixels/config.Height {
+		return nil, "", fmt.Errorf("avatar dimensions too large or invalid: %dx%d", config.Width, config.Height)
+	}
+	return image.Decode(bytes.NewReader(data))
+}
 
-	localPath := filepath.Join(a.cacheDir, id+ext)
-	tmpPath := localPath + ".part"
-	file, err := os.Create(tmpPath)
+func encodeAvatarPNG(w io.Writer, r io.Reader) error {
+	img, _, err := decodeAvatar(r)
+	if err != nil {
+		return err
+	}
+	bounds := img.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
+	if width > avatarIconSize || height > avatarIconSize {
+		if width >= height {
+			height = max(1, height*avatarIconSize/width)
+			width = avatarIconSize
+		} else {
+			width = max(1, width*avatarIconSize/height)
+			height = avatarIconSize
+		}
+		// RGBA enables the scaler's optimized JPEG/YCbCr path.
+		thumb := image.NewRGBA(image.Rect(0, 0, width, height))
+		draw.ApproxBiLinear.Scale(thumb, thumb.Bounds(), img, bounds, draw.Src, nil)
+		img = thumb
+	}
+	encoder := png.Encoder{CompressionLevel: png.BestSpeed}
+	return encoder.Encode(w, img)
+}
+
+func (a *AvatarCache) storePNG(localPath string, r io.Reader) (string, error) {
+	if err := a.ctx.Err(); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(a.cacheDir, 0o755); err != nil {
+		return "", err
+	}
+	file, err := os.CreateTemp(a.cacheDir, "avatar-*.part")
 	if err != nil {
 		return "", err
 	}
-	if _, err := file.Write(head); err != nil {
+	defer os.Remove(file.Name())
+	if err := encodeAvatarPNG(file, r); err != nil {
 		file.Close()
-		os.Remove(tmpPath)
-		return "", err
-	}
-	if _, err := io.Copy(file, resp.Body); err != nil {
-		file.Close()
-		os.Remove(tmpPath)
 		return "", err
 	}
 	if err := file.Close(); err != nil {
-		os.Remove(tmpPath)
 		return "", err
 	}
-	if err := os.Rename(tmpPath, localPath); err != nil {
-		os.Remove(tmpPath)
+	if err := a.ctx.Err(); err != nil {
+		return "", err
+	}
+	if err := os.Rename(file.Name(), localPath); err != nil {
 		return "", err
 	}
 	return localPath, nil
@@ -189,5 +247,14 @@ func (a *AvatarCache) Clear() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.cache = make(map[string]string)
+	a.retryAfter = make(map[string]time.Time)
 	return os.RemoveAll(a.cacheDir)
+}
+
+// Close cancels pending HTTP requests and waits for active conversions.
+func (a *AvatarCache) Close() {
+	a.mu.Lock()
+	a.cancel()
+	a.mu.Unlock()
+	a.workers.Wait()
 }

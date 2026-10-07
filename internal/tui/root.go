@@ -125,6 +125,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.pluginsConfig.IsVisible() {
+			wasEditing := m.pluginsConfig.IsEditing()
 			var cmd tea.Cmd
 			m.pluginsConfig, cmd = m.pluginsConfig.Update(msg)
 			if cmd != nil {
@@ -132,7 +133,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Esc 关闭弹窗（只有在非编辑状态）
-			if msg.String() == "esc" {
+			if msg.String() == "esc" && !wasEditing {
 				m.pluginsConfig, _ = m.pluginsConfig.Update(tuimsg.HidePopupMsg{})
 			}
 

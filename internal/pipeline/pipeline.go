@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/xifan2333/dmnotifier/internal/plugin"
@@ -17,22 +18,29 @@ type Pipeline struct {
 	consumers  []plugin.ConsumerPlugin
 	mu         sync.RWMutex
 	wg         sync.WaitGroup // 追踪正在处理的消费者任务
+	onError    func(error)
+	ctx        context.Context
+	cancel     context.CancelFunc
 }
 
 // PipelineConfig 管道配置
 type PipelineConfig struct {
 	Name    string
 	Enabled bool
+	OnError func(error)
 }
 
 // NewPipeline 创建新的管道
 func NewPipeline(config PipelineConfig) *Pipeline {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Pipeline{
 		name:       config.Name,
 		enabled:    config.Enabled,
 		filters:    make([]plugin.FilterPlugin, 0),
 		transforms: make([]plugin.TransformPlugin, 0),
 		consumers:  make([]plugin.ConsumerPlugin, 0),
+		onError:    config.OnError,
+		ctx:        ctx, cancel: cancel,
 	}
 }
 
@@ -81,12 +89,14 @@ func (p *Pipeline) AddConsumer(c plugin.ConsumerPlugin) {
 
 // Process 处理消息
 func (p *Pipeline) Process(ctx context.Context, msg *models.Message) error {
-	// 检查管道是否启用
-	if !p.IsEnabled() {
+	p.mu.RLock()
+	if !p.enabled || p.ctx.Err() != nil {
+		p.mu.RUnlock()
 		return nil
 	}
-
-	p.mu.RLock()
+	// Register before shutdown can begin waiting, including filter/transform work.
+	p.wg.Add(1)
+	defer p.wg.Done()
 	filters := p.filters
 	transforms := p.transforms
 	consumers := p.consumers
@@ -120,8 +130,14 @@ func (p *Pipeline) Process(ctx context.Context, msg *models.Message) error {
 		p.wg.Add(1)
 		go func(c plugin.ConsumerPlugin, msg *models.Message) {
 			defer p.wg.Done()
-			if err := c.Consume(ctx, msg); err != nil {
-
+			consumeCtx, cancel := context.WithCancel(ctx)
+			stop := context.AfterFunc(p.ctx, cancel)
+			defer stop()
+			defer cancel()
+			if err := c.Consume(consumeCtx, msg); err != nil {
+				if p.onError != nil {
+					p.onError(fmt.Errorf("%s: %w", c.Name(), err))
+				}
 			}
 		}(consumer, transformedMsg)
 	}
@@ -144,6 +160,9 @@ func (p *Pipeline) GetStats() map[string]int {
 
 // Shutdown 关闭管道，停止所有插件
 func (p *Pipeline) Shutdown(ctx context.Context) error {
+	p.mu.Lock()
+	p.cancel()
+	p.mu.Unlock()
 
 	// 等待所有正在处理的消费者任务完成
 	p.wg.Wait()

@@ -1,31 +1,28 @@
 package tts
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
-	"encoding/binary"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"os/exec"
-	"runtime"
+	"strings"
 	"time"
 
+	"github.com/lib-x/edgetts"
 	"github.com/xifan2333/dmnotifier/internal/plugin"
 	"github.com/xifan2333/dmnotifier/pkg/models"
 )
 
 const (
-	defaultBaseURL = "https://api.xiaomimimo.com/v1"
-	defaultModel   = "mimo-v2.5-tts"
-	defaultVoice   = "茉莉"
+	defaultBaseURL   = "https://api.xiaomimimo.com/v1"
+	defaultModel     = "mimo-v2.5-tts"
+	defaultVoice     = "茉莉"
+	defaultProvider  = "mimo"
+	defaultEdgeVoice = "zh-CN-XiaoxiaoNeural"
 )
 
 type audioItem struct {
-	text      string
-	audioData []byte
+	prefix  string
+	content string
 }
 
 type Consumer struct {
@@ -35,12 +32,20 @@ type Consumer struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	apiKey  string
-	baseURL string
-	model   string
-	voice   string
+	apiKey     string
+	baseURL    string
+	model      string
+	voice      string
+	provider   string
+	edgeVoice  string
+	edgeClient *edgetts.Client
+	onError    func(error)
 
 	httpClient *http.Client
+	player     string
+	done       chan struct{}
+	cache      prefixCache
+	onTiming   func(Timing)
 }
 
 func New() plugin.Plugin {
@@ -49,6 +54,8 @@ func New() plugin.Plugin {
 		baseURL:    defaultBaseURL,
 		model:      defaultModel,
 		voice:      defaultVoice,
+		provider:   defaultProvider,
+		edgeVoice:  defaultEdgeVoice,
 	}
 }
 
@@ -69,6 +76,29 @@ func (c *Consumer) Init(ctx context.Context, config map[string]interface{}) erro
 	if v, ok := config["voice"].(string); ok && v != "" {
 		c.voice = v
 	}
+	if v, ok := config["provider"].(string); ok && strings.TrimSpace(v) != "" {
+		c.provider = strings.ToLower(strings.TrimSpace(v))
+	}
+	if v, ok := config["edge_voice"].(string); ok && strings.TrimSpace(v) != "" {
+		c.edgeVoice = strings.TrimSpace(v)
+	}
+	if onError, ok := config["on_error"].(func(error)); ok {
+		c.onError = onError
+	}
+
+	switch c.provider {
+	case "mimo":
+		if c.apiKey == "" {
+			return fmt.Errorf("MiMo requires api_key (or select provider=edge)")
+		}
+	case "edge":
+		c.edgeClient = edgetts.New(edgetts.WithVoice(c.edgeVoice))
+	default:
+		return fmt.Errorf("unknown TTS provider %q (choose mimo or edge)", c.provider)
+	}
+	if err := c.checkPlayer(); err != nil {
+		return err
+	}
 
 	queueSize := 100
 	if size, ok := config["queue_size"].(int); ok && size > 0 {
@@ -76,16 +106,15 @@ func (c *Consumer) Init(ctx context.Context, config map[string]interface{}) erro
 	}
 	c.queue = make(chan *audioItem, queueSize)
 
-	c.ctx, c.cancel = context.WithCancel(context.Background())
-	c.httpClient = &http.Client{Timeout: 30 * time.Second}
-
-	if c.apiKey == "" {
-		return fmt.Errorf("api_key is required")
+	c.ctx, c.cancel = context.WithCancel(ctx)
+	c.done = make(chan struct{})
+	if f, ok := config["on_timing"].(func(Timing)); ok {
+		c.onTiming = f
 	}
-
-	if err := c.checkPlayer(); err != nil {
-		return err
-	}
+	c.httpClient = &http.Client{Transport: &http.Transport{
+		Proxy: http.ProxyFromEnvironment, MaxIdleConns: 8, MaxIdleConnsPerHost: 4,
+		IdleConnTimeout: 90 * time.Second, TLSHandshakeTimeout: 10 * time.Second, ResponseHeaderTimeout: 30 * time.Second,
+	}}
 
 	go c.playLoop()
 
@@ -93,65 +122,59 @@ func (c *Consumer) Init(ctx context.Context, config map[string]interface{}) erro
 }
 
 func (c *Consumer) Consume(ctx context.Context, msg *models.Message) error {
+	if c.ctx.Err() != nil {
+		return nil
+	}
 	prefix, content := c.formatMessage(msg)
 	if prefix == "" && content == "" {
 		return nil
 	}
 
-	go func() {
-		var wavs [][]byte
-		if prefix != "" {
-			pfxWav, err := c.generateAudio(prefix)
-			if err != nil {
-				return
-			}
-			wavs = append(wavs, pfxWav)
-		}
-		if content != "" {
-			ctntWav, err := c.generateAudio(content)
-			if err != nil {
-				return
-			}
-			wavs = append(wavs, ctntWav)
-		}
-		if len(wavs) == 0 {
-			return
-		}
-		merged, err := mergeWAVs(wavs)
-		if err != nil {
-			return
-		}
-
-		select {
-		case c.queue <- &audioItem{text: prefix + content, audioData: merged}:
-		case <-c.ctx.Done():
-			return
-		default:
-		}
-	}()
+	// Wait for queue space in the background consumer task instead of dropping.
+	select {
+	case c.queue <- &audioItem{prefix: prefix, content: content}:
+	case <-c.ctx.Done():
+	case <-ctx.Done():
+	}
 
 	return nil
 }
 
 func (c *Consumer) playLoop() {
+	defer close(c.done)
+	defer c.httpClient.CloseIdleConnections()
 	for {
 		select {
-		case item := <-c.queue:
-			if err := c.speakDirect(item.audioData); err != nil {
-				_ = err
-			}
 		case <-c.ctx.Done():
 			return
+		case item := <-c.queue:
+			if c.ctx.Err() != nil {
+				return
+			}
+			if err := c.playMessage(item); err != nil {
+				c.reportError(err)
+			}
 		}
 	}
 }
 
 func (c *Consumer) Stop(ctx context.Context) error {
-	c.cancel()
-	for len(c.queue) > 0 {
-		<-c.queue
+	if c.cancel == nil {
+		return nil
 	}
-	return nil
+	c.cancel()
+	select {
+	case <-c.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (c *Consumer) reportError(err error) {
+	if c.ctx.Err() == nil && c.onError != nil {
+		c.onError(fmt.Errorf("tts: %w", err))
+	}
 }
 
 // formatMessage 拆出 (prefix, content)：chat 类型 prefix 用默认语气，content 保留观众原文
@@ -173,229 +196,63 @@ func (c *Consumer) formatMessage(msg *models.Message) (prefix, content string) {
 	}
 }
 
-// mergeWAVs 用 skip-44 把多段相同格式的 WAV 合并成一段
-func mergeWAVs(wavs [][]byte) ([]byte, error) {
-	const hdr = 44
-	if len(wavs) == 0 {
-		return nil, fmt.Errorf("no wavs")
-	}
-	for i, w := range wavs {
-		if len(w) < hdr || string(w[0:4]) != "RIFF" || string(w[8:12]) != "WAVE" || string(w[36:40]) != "data" {
-			return nil, fmt.Errorf("wav %d: unexpected header layout", i)
-		}
-	}
-	if len(wavs) == 1 {
-		return wavs[0], nil
-	}
-	total := len(wavs[0])
-	for _, w := range wavs[1:] {
-		total += len(w) - hdr
-	}
-	out := make([]byte, 0, total)
-	out = append(out, wavs[0]...)
-	for _, w := range wavs[1:] {
-		out = append(out, w[hdr:]...)
-	}
-	binary.LittleEndian.PutUint32(out[4:8], uint32(len(out)-8))
-	binary.LittleEndian.PutUint32(out[40:44], uint32(len(out)-hdr))
-	return out, nil
-}
-
-type mimoMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-type mimoAudio struct {
-	Format string `json:"format"`
-	Voice  string `json:"voice"`
-}
-
-type mimoRequest struct {
-	Model    string        `json:"model"`
-	Messages []mimoMessage `json:"messages"`
-	Audio    mimoAudio     `json:"audio"`
-}
-
-type mimoResponse struct {
-	Choices []struct {
-		Message struct {
-			Audio struct {
-				Data string `json:"data"`
-			} `json:"audio"`
-		} `json:"message"`
-	} `json:"choices"`
-	Error *struct {
-		Message string `json:"message"`
-	} `json:"error,omitempty"`
-}
-
-func (c *Consumer) generateAudio(text string) ([]byte, error) {
-	reqBody := mimoRequest{
-		Model: c.model,
-		Messages: []mimoMessage{
-			{Role: "assistant", Content: text},
-		},
-		Audio: mimoAudio{Format: "wav", Voice: c.voice},
-	}
-
-	body, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(c.ctx, "POST", c.baseURL+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("api-key", c.apiKey)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("http: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("http %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var parsed mimoResponse
-	if err := json.Unmarshal(respBody, &parsed); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
-	}
-	if parsed.Error != nil {
-		return nil, fmt.Errorf("api error: %s", parsed.Error.Message)
-	}
-	if len(parsed.Choices) == 0 || parsed.Choices[0].Message.Audio.Data == "" {
-		return nil, fmt.Errorf("empty audio data in response")
-	}
-
-	audio, err := base64.StdEncoding.DecodeString(parsed.Choices[0].Message.Audio.Data)
-	if err != nil {
-		return nil, fmt.Errorf("decode base64: %w", err)
-	}
-
-	return audio, nil
-}
-
-func (c *Consumer) speakDirect(audioData []byte) error {
-	var playerCmd string
-	var playerArgs []string
-
-	switch runtime.GOOS {
-	case "darwin":
-		playerCmd = "afplay"
-		playerArgs = []string{"-"}
-	case "linux":
-		if _, err := exec.LookPath("mpv"); err == nil {
-			playerCmd = "mpv"
-			playerArgs = []string{"--really-quiet", "--no-terminal", "-"}
-		} else if _, err := exec.LookPath("ffplay"); err == nil {
-			playerCmd = "ffplay"
-			playerArgs = []string{"-nodisp", "-autoexit", "-"}
-		} else {
-			return fmt.Errorf("no audio player found (mpv or ffplay)")
-		}
-	case "windows":
-		if _, err := exec.LookPath("ffplay"); err == nil {
-			playerCmd = "ffplay"
-			playerArgs = []string{"-nodisp", "-autoexit", "-"}
-		} else if _, err := exec.LookPath("mpv"); err == nil {
-			playerCmd = "mpv"
-			playerArgs = []string{"--really-quiet", "--no-terminal", "-"}
-		} else {
-			return fmt.Errorf("no audio player found (install ffplay or mpv)")
-		}
-	default:
-		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
-	}
-
-	cmd := exec.CommandContext(c.ctx, playerCmd, playerArgs...)
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("create stdin pipe: %w", err)
-	}
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("start player: %w", err)
-	}
-
-	if _, err := stdin.Write(audioData); err != nil {
-		stdin.Close()
-		cmd.Process.Kill()
-		return fmt.Errorf("write audio: %w", err)
-	}
-	stdin.Close()
-
-	if err := cmd.Wait(); err != nil {
-		return fmt.Errorf("player failed: %w", err)
-	}
-
-	return nil
-}
-
-func (c *Consumer) checkPlayer() error {
-	switch runtime.GOOS {
-	case "darwin":
-		if _, err := exec.LookPath("afplay"); err != nil {
-			return fmt.Errorf("afplay not found (should be built-in on macOS)")
-		}
-	case "linux":
-		_, err1 := exec.LookPath("mpv")
-		_, err2 := exec.LookPath("ffplay")
-		if err1 != nil && err2 != nil {
-			return fmt.Errorf("mpv or ffplay not found. Install with: sudo pacman -S mpv (Arch) or sudo apt install mpv (Debian/Ubuntu)")
-		}
-	case "windows":
-		_, err1 := exec.LookPath("ffplay")
-		_, err2 := exec.LookPath("mpv")
-		if err1 != nil && err2 != nil {
-			return fmt.Errorf("ffplay or mpv not found on PATH (install ffmpeg or mpv)")
-		}
-	default:
-		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
-	}
-	return nil
-}
-
 func init() {
 	plugin.Register("tts", New, plugin.PluginInfo{
 		Name: "tts",
 		Type: plugin.TypeConsumer,
 		ConfigTemplate: []plugin.ConfigField{
 			{
+				Name:         "provider",
+				Label:        "Speech engine",
+				OptionLabels: map[string]string{"mimo": "MiMo", "edge": "Edge"},
+				Type:         plugin.FieldTypeEnum,
+				Default:      defaultProvider,
+				Desc:         "TTS engine (mimo or edge)",
+				Options:      []string{"mimo", "edge"},
+			},
+			{
+				Name:         "edge_voice",
+				Label:        "Voice",
+				Options:      edgeVoiceOptions,
+				OptionLabels: edgeVoiceLabels,
+				Type:         plugin.FieldTypeEnum,
+				Default:      defaultEdgeVoice,
+				Desc:         "Edge voice (e.g. zh-CN-XiaoxiaoNeural or zh-CN-YunxiNeural)",
+			},
+			{
 				Name:    "api_key",
+				Label:   "API key",
 				Type:    plugin.FieldTypeString,
 				Default: "",
-				Desc:    "Xiaomi MiMo API Key (required)",
+				Desc:    "Xiaomi MiMo API Key (required only for mimo)",
 			},
 			{
 				Name:    "base_url",
+				Label:   "MiMo API URL",
 				Type:    plugin.FieldTypeString,
 				Default: defaultBaseURL,
 				Desc:    "API Base URL",
 			},
 			{
 				Name:    "model",
-				Type:    plugin.FieldTypeString,
+				Label:   "MiMo model",
+				Type:    plugin.FieldTypeEnum,
+				Options: []string{defaultModel},
 				Default: defaultModel,
 				Desc:    "TTS model",
 			},
 			{
-				Name:    "voice",
-				Type:    plugin.FieldTypeString,
-				Default: defaultVoice,
-				Desc:    "Voice (preset timbre, e.g. 茉莉/冰糖/苏打/白桦/Mia/Chloe/Milo/Dean/mimo_default)",
+				Name:         "voice",
+				Label:        "Voice",
+				Options:      []string{"茉莉", "冰糖", "苏打", "白桦"},
+				OptionLabels: mimoVoiceLabels,
+				Type:         plugin.FieldTypeEnum,
+				Default:      defaultVoice,
+				Desc:         "MiMo voice (e.g. 茉莉/冰糖/苏打/白桦/Mia/Chloe/Milo/Dean/mimo_default)",
 			},
 			{
 				Name:    "queue_size",
+				Label:   "Playback queue size",
 				Type:    plugin.FieldTypeNumber,
 				Default: 100,
 				Desc:    "Playback queue size",

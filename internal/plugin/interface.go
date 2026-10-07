@@ -28,11 +28,13 @@ const (
 
 // ConfigField 配置字段定义
 type ConfigField struct {
-	Name    string          // 字段名称
-	Type    ConfigFieldType // 字段类型
-	Default interface{}     // 默认值
-	Desc    string          // 字段描述
-	Options []string        // 选项列表（用于 enum 和 array 类型）
+	Name         string            // 字段名称
+	Type         ConfigFieldType   // 字段类型
+	Default      interface{}       // 默认值
+	Desc         string            // 字段描述
+	Options      []string          // 选项列表（用于 enum 和 array 类型）
+	Label        string            // 界面显示名称，留空时使用 Name
+	OptionLabels map[string]string // 选项显示名称，配置仍保存原始值
 }
 
 // Plugin 插件基础接口

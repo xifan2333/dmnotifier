@@ -28,7 +28,7 @@ func (c *Consumer) Init(ctx context.Context, config map[string]interface{}) erro
 	if err := c.BasePlugin.Init(ctx, config); err != nil {
 		return err
 	}
-	c.ctx, c.cancel = context.WithCancel(context.Background())
+	c.ctx, c.cancel = context.WithCancel(ctx)
 	// warm extract embedded icons
 	_ = platformicons.Path("bilibili")
 
@@ -50,6 +50,9 @@ func (c *Consumer) Consume(ctx context.Context, msg *models.Message) error {
 	}
 	title := fmt.Sprintf("%s | %s", formatted.Platform, formatted.UserName)
 	icon := resolveIcon(c.avatarCache, formatted.Avatar, formatted.Platform)
+	if c.ctx.Err() != nil || ctx.Err() != nil {
+		return nil
+	}
 	return beeep.Notify(title, formatted.Content, icon)
 }
 
@@ -70,6 +73,9 @@ func resolveIcon(cache *AvatarCache, avatar, platform string) string {
 func (c *Consumer) Stop(ctx context.Context) error {
 	if c.cancel != nil {
 		c.cancel()
+	}
+	if c.avatarCache != nil {
+		c.avatarCache.Close()
 	}
 	return nil
 }
