@@ -464,17 +464,6 @@ func (m PluginsConfigModel) getPluginItemCount() int {
 	return 2 + len(template)
 }
 
-// getPluginConfigTemplate 获取插件的配置模板
-func getPluginConfigTemplate(pluginName string) []plugin.ConfigField {
-	pluginInfos := plugin.GlobalRegistry.GetAllPluginInfo()
-	for _, info := range pluginInfos {
-		if info.Name == pluginName {
-			return info.ConfigTemplate
-		}
-	}
-	return []plugin.ConfigField{}
-}
-
 // renderPluginsList 渲染插件列表
 func (m PluginsConfigModel) renderPluginsList() string {
 	var items []string

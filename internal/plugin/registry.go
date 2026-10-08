@@ -71,6 +71,15 @@ type PluginInfo struct {
 	Name           string
 	Type           PluginType
 	ConfigTemplate []ConfigField
+	ConfigFields   func(map[string]interface{}) []ConfigField
+}
+
+// Fields returns the editable schema without changing persisted defaults.
+func (info PluginInfo) Fields(config map[string]interface{}) []ConfigField {
+	if info.ConfigFields != nil {
+		return info.ConfigFields(config)
+	}
+	return info.ConfigTemplate
 }
 
 // GetAllPluginInfo 获取所有插件的信息

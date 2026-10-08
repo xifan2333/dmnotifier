@@ -11,40 +11,16 @@ import (
 	"github.com/xifan2333/dmnotifier/internal/plugin"
 )
 
-// All rendering, navigation and editing use this same field list. Hidden
-// provider settings remain in Config and are restored when switching back.
+// Use the same schema for rendering, navigation and editing.
 func visiblePluginFields(cfg tuimsg.PluginConfig) []plugin.ConfigField {
-	fields := getPluginConfigTemplate(cfg.Name)
-	if cfg.Name != "tts" {
-		return fields
-	}
-	result := make([]plugin.ConfigField, 0, len(fields))
-	for _, f := range fields {
-		switch f.Name {
-		case "edge_voice":
-			if ttsProvider(cfg) != "edge" {
-				continue
-			}
-		case "base_url", "model":
-			continue
-		case "api_key", "voice":
-			if ttsProvider(cfg) == "edge" {
-				continue
-			}
+	for _, info := range plugin.GlobalRegistry.GetAllPluginInfo() {
+		if info.Name == cfg.Name {
+			return info.Fields(cfg.Config)
 		}
-		result = append(result, f)
 	}
-	return result
+	return nil
 }
 
-func ttsProvider(cfg tuimsg.PluginConfig) string {
-	value, _ := cfg.Config["provider"].(string)
-	value = strings.ToLower(strings.TrimSpace(value))
-	if value == "" {
-		return "mimo"
-	}
-	return value
-}
 func fieldLabel(f plugin.ConfigField) string {
 	if f.Label != "" {
 		return f.Label

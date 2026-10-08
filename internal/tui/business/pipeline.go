@@ -106,12 +106,12 @@ func buildPipelineForConsumer(ctx context.Context, pluginCfg tuimsg.PluginConfig
 		config["program"] = program
 	}
 
-	if pluginCfg.Name == "tts" {
-		config["on_error"] = func(err error) {
+	if reporter, ok := consumer.(plugin.ErrorHandlerSetter); ok {
+		reporter.SetErrorHandler(func(err error) {
 			if program != nil {
 				program.Send(tuimsg.ErrorMsg{Err: err})
 			}
-		}
+		})
 	}
 
 	if err := consumer.Init(ctx, config); err != nil {

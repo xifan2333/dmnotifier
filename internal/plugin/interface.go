@@ -79,6 +79,11 @@ type ConsumerPlugin interface {
 	Consume(ctx context.Context, msg *models.Message) error
 }
 
+// ErrorHandlerSetter is implemented by plugins that report background errors.
+type ErrorHandlerSetter interface {
+	SetErrorHandler(func(error))
+}
+
 // BasePlugin 插件基础实现（可选继承）
 type BasePlugin struct {
 	name   string

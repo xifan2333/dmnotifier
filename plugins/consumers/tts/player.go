@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"time"
 )
 
 func (c *Consumer) checkPlayer() error {
@@ -48,45 +47,17 @@ func playerArgs(player string, format audioFormat) []string {
 }
 
 func (c *Consumer) playMessage(item *audioItem) error {
-	ctx, fail := context.WithCancelCause(c.ctx)
-	cancel := func() { fail(context.Canceled) }
+	ctx, cancel := context.WithCancel(c.ctx)
 	defer cancel()
-	var streams []audioStream
-	var parts []string
-	defer func() {
-		cancel()
-		for _, s := range streams {
-			_ = s.Close()
-		}
-		for _, s := range streams {
-			<-s.done
-		}
-	}()
-	// Each producer blocks on its pipe once the first bounded SSE/MP3 packet
-	// arrives. Thus even the body cannot accumulate a complete long utterance.
-	texts := []string{item.prefix, item.content}
-	if c.provider == "edge" {
-		texts = []string{"", item.prefix + item.content}
+	stream, err := c.engine.Stream(ctx, item.prefix, item.content)
+	if err != nil {
+		return err
 	}
-	for i, text := range texts {
-		if text == "" {
-			continue
-		}
-		part := "body"
-		if i == 0 {
-			part = "prefix"
-		}
-		s := c.stream(ctx, text, part, i == 0, fail)
-		streams = append(streams, s)
-		parts = append(parts, part)
-	}
-	if len(streams) == 0 {
-		return nil
-	}
+	defer stream.Close()
 	if c.player == "afplay" {
-		return c.playFile(ctx, streams)
+		return c.playFile(ctx, stream)
 	}
-	cmd := exec.CommandContext(ctx, c.player, playerArgs(c.player, streams[0].Format)...)
+	cmd := exec.CommandContext(ctx, c.player, playerArgs(c.player, stream.Format)...)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return err
@@ -98,18 +69,7 @@ func (c *Consumer) playMessage(item *audioItem) error {
 	// Wait concurrently: an early player exit must cancel blocked network reads.
 	exited := make(chan error, 1)
 	go func() { err := cmd.Wait(); cancel(); exited <- err }()
-	var copyErr error
-	for i, s := range streams {
-		w := &deliveryWriter{dst: stdin, first: func() {
-			at := s.firstAt.Load()
-			if at != 0 {
-				c.emitTiming(Timing{Provider: c.provider, Part: parts[i], Phase: "delivery", FirstWrite: time.Since(time.Unix(0, at))})
-			}
-		}}
-		if _, copyErr = io.CopyBuffer(w, s, make([]byte, audioBuffer)); copyErr != nil {
-			break
-		}
-	}
+	_, copyErr := stream.WriteTo(stdin)
 	_ = stdin.Close()
 	if copyErr != nil {
 		cancel()
@@ -119,7 +79,7 @@ func (c *Consumer) playMessage(item *audioItem) error {
 		return cause
 	}
 	if copyErr != nil {
-		return fmt.Errorf("%s audio stream: %w", c.provider, copyErr)
+		return fmt.Errorf("audio stream: %w", copyErr)
 	}
 	if waitErr != nil {
 		return fmt.Errorf("player failed: %w", waitErr)
@@ -127,26 +87,11 @@ func (c *Consumer) playMessage(item *audioItem) error {
 	return nil
 }
 
-type deliveryWriter struct {
-	dst   io.Writer
-	first func()
-	seen  bool
-}
-
-func (w *deliveryWriter) Write(b []byte) (int, error) {
-	n, err := w.dst.Write(b)
-	if n > 0 && !w.seen {
-		w.seen = true
-		w.first()
-	}
-	return n, err
-}
-
 // afplay requires a seekable file. Only this explicit macOS fallback waits for
 // all audio; raw MiMo PCM is wrapped in a proper WAV header after streaming.
-func (c *Consumer) playFile(ctx context.Context, streams []audioStream) error {
+func (c *Consumer) playFile(ctx context.Context, stream AudioStream) error {
 	ext := ".mp3"
-	if streams[0].Format == pcm16 {
+	if stream.Format == pcm16 {
 		ext = ".wav"
 	}
 	f, err := os.CreateTemp("", "dmnotifier-tts-*"+ext)
@@ -160,13 +105,9 @@ func (c *Consumer) playFile(ctx context.Context, streams []audioStream) error {
 			return err
 		}
 	}
-	var size int64
-	for _, s := range streams {
-		n, e := io.CopyBuffer(f, s, make([]byte, audioBuffer))
-		size += n
-		if e != nil {
-			return e
-		}
+	size, err := io.CopyBuffer(f, struct{ io.Reader }{stream}, make([]byte, audioBuffer))
+	if err != nil {
+		return err
 	}
 	if ext == ".wav" {
 		if size > int64(^uint32(0))-36 {

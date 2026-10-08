@@ -1,35 +1,31 @@
 package tts
 
-import (
-	_ "embed"
-	"encoding/json"
-	"strings"
-)
+// Chinese voices from the upstream catalog, 2026-10-08.
+var edgeVoiceOptions, edgeVoiceLabels = edgeVoices()
 
-// Upstream voice catalog snapshot, fetched 2026-10-08. The selector exposes
-// Chinese locales only and works offline.
-// Source: https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4
-//
-//go:embed edge_voices.json
-var edgeVoiceCatalog []byte
-
-var edgeVoiceOptions, edgeVoiceLabels = parseEdgeVoices()
-
-func parseEdgeVoices() ([]string, map[string]string) {
-	var voices []struct{ ShortName, Gender, Locale string }
-	if err := json.Unmarshal(edgeVoiceCatalog, &voices); err != nil {
-		panic(err)
+func edgeVoices() ([]string, map[string]string) {
+	voices := []struct{ name, gender string }{
+		{"zh-CN-XiaoxiaoNeural", "Female"},
+		{"zh-CN-XiaoyiNeural", "Female"},
+		{"zh-CN-YunjianNeural", "Male"},
+		{"zh-CN-YunxiNeural", "Male"},
+		{"zh-CN-YunxiaNeural", "Male"},
+		{"zh-CN-YunyangNeural", "Male"},
+		{"zh-CN-liaoning-XiaobeiNeural", "Female"},
+		{"zh-CN-shaanxi-XiaoniNeural", "Female"},
+		{"zh-HK-HiuGaaiNeural", "Female"},
+		{"zh-HK-HiuMaanNeural", "Female"},
+		{"zh-HK-WanLungNeural", "Male"},
+		{"zh-TW-HsiaoChenNeural", "Female"},
+		{"zh-TW-HsiaoYuNeural", "Female"},
+		{"zh-TW-YunJheNeural", "Male"},
 	}
 	options := make([]string, 0, len(voices))
 	labels := make(map[string]string, len(voices))
-	for _, v := range voices {
-		if !strings.HasPrefix(v.Locale, "zh-") {
-			continue
-		}
-		options = append(options, v.ShortName)
-		labels[v.ShortName] = v.ShortName + " · " + v.Gender
+	for _, voice := range voices {
+		options = append(options, voice.name)
+		labels[voice.name] = voice.name + " · " + voice.gender
 	}
-
 	return options, labels
 }
 

@@ -3,11 +3,7 @@ package tts
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"strings"
-	"time"
 
-	"github.com/lib-x/edgetts"
 	"github.com/xifan2333/dmnotifier/internal/plugin"
 	"github.com/xifan2333/dmnotifier/pkg/models"
 )
@@ -32,31 +28,15 @@ type Consumer struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	apiKey     string
-	baseURL    string
-	model      string
-	voice      string
-	provider   string
-	edgeVoice  string
-	edgeClient *edgetts.Client
-	onError    func(error)
-
-	httpClient *http.Client
-	player     string
-	done       chan struct{}
-	cache      prefixCache
-	onTiming   func(Timing)
+	engine   engine
+	onError  func(error)
+	player   string
+	done     chan struct{}
+	onTiming func(Timing)
 }
 
 func New() plugin.Plugin {
-	return &Consumer{
-		BasePlugin: plugin.NewBasePlugin("tts", plugin.TypeConsumer),
-		baseURL:    defaultBaseURL,
-		model:      defaultModel,
-		voice:      defaultVoice,
-		provider:   defaultProvider,
-		edgeVoice:  defaultEdgeVoice,
-	}
+	return &Consumer{BasePlugin: plugin.NewBasePlugin("tts", plugin.TypeConsumer)}
 }
 
 func (c *Consumer) Init(ctx context.Context, config map[string]interface{}) error {
@@ -64,39 +44,19 @@ func (c *Consumer) Init(ctx context.Context, config map[string]interface{}) erro
 		return err
 	}
 
-	if v, ok := config["api_key"].(string); ok {
-		c.apiKey = v
+	if f, ok := config["on_timing"].(func(Timing)); ok {
+		c.onTiming = f
 	}
-	if v, ok := config["base_url"].(string); ok && v != "" {
-		c.baseURL = v
+	definition, err := findEngine(config)
+	if err != nil {
+		return err
 	}
-	if v, ok := config["model"].(string); ok && v != "" {
-		c.model = v
-	}
-	if v, ok := config["voice"].(string); ok && v != "" {
-		c.voice = v
-	}
-	if v, ok := config["provider"].(string); ok && strings.TrimSpace(v) != "" {
-		c.provider = strings.ToLower(strings.TrimSpace(v))
-	}
-	if v, ok := config["edge_voice"].(string); ok && strings.TrimSpace(v) != "" {
-		c.edgeVoice = strings.TrimSpace(v)
-	}
-	if onError, ok := config["on_error"].(func(error)); ok {
-		c.onError = onError
-	}
-
-	switch c.provider {
-	case "mimo":
-		if c.apiKey == "" {
-			return fmt.Errorf("MiMo requires api_key (or select provider=edge)")
-		}
-	case "edge":
-		c.edgeClient = edgetts.New(edgetts.WithVoice(c.edgeVoice))
-	default:
-		return fmt.Errorf("unknown TTS provider %q (choose mimo or edge)", c.provider)
+	c.engine, err = definition.create(config, c.emitTiming)
+	if err != nil {
+		return err
 	}
 	if err := c.checkPlayer(); err != nil {
+		_ = c.engine.Close()
 		return err
 	}
 
@@ -108,13 +68,6 @@ func (c *Consumer) Init(ctx context.Context, config map[string]interface{}) erro
 
 	c.ctx, c.cancel = context.WithCancel(ctx)
 	c.done = make(chan struct{})
-	if f, ok := config["on_timing"].(func(Timing)); ok {
-		c.onTiming = f
-	}
-	c.httpClient = &http.Client{Transport: &http.Transport{
-		Proxy: http.ProxyFromEnvironment, MaxIdleConns: 8, MaxIdleConnsPerHost: 4,
-		IdleConnTimeout: 90 * time.Second, TLSHandshakeTimeout: 10 * time.Second, ResponseHeaderTimeout: 30 * time.Second,
-	}}
 
 	go c.playLoop()
 
@@ -142,7 +95,7 @@ func (c *Consumer) Consume(ctx context.Context, msg *models.Message) error {
 
 func (c *Consumer) playLoop() {
 	defer close(c.done)
-	defer c.httpClient.CloseIdleConnections()
+	defer c.engine.Close()
 	for {
 		select {
 		case <-c.ctx.Done():
@@ -196,67 +149,4 @@ func (c *Consumer) formatMessage(msg *models.Message) (prefix, content string) {
 	}
 }
 
-func init() {
-	plugin.Register("tts", New, plugin.PluginInfo{
-		Name: "tts",
-		Type: plugin.TypeConsumer,
-		ConfigTemplate: []plugin.ConfigField{
-			{
-				Name:         "provider",
-				Label:        "Speech engine",
-				OptionLabels: map[string]string{"mimo": "MiMo", "edge": "Edge"},
-				Type:         plugin.FieldTypeEnum,
-				Default:      defaultProvider,
-				Desc:         "TTS engine (mimo or edge)",
-				Options:      []string{"mimo", "edge"},
-			},
-			{
-				Name:         "edge_voice",
-				Label:        "Voice",
-				Options:      edgeVoiceOptions,
-				OptionLabels: edgeVoiceLabels,
-				Type:         plugin.FieldTypeEnum,
-				Default:      defaultEdgeVoice,
-				Desc:         "Edge voice (e.g. zh-CN-XiaoxiaoNeural or zh-CN-YunxiNeural)",
-			},
-			{
-				Name:    "api_key",
-				Label:   "API key",
-				Type:    plugin.FieldTypeString,
-				Default: "",
-				Desc:    "Xiaomi MiMo API Key (required only for mimo)",
-			},
-			{
-				Name:    "base_url",
-				Label:   "MiMo API URL",
-				Type:    plugin.FieldTypeString,
-				Default: defaultBaseURL,
-				Desc:    "API Base URL",
-			},
-			{
-				Name:    "model",
-				Label:   "MiMo model",
-				Type:    plugin.FieldTypeEnum,
-				Options: []string{defaultModel},
-				Default: defaultModel,
-				Desc:    "TTS model",
-			},
-			{
-				Name:         "voice",
-				Label:        "Voice",
-				Options:      []string{"茉莉", "冰糖", "苏打", "白桦"},
-				OptionLabels: mimoVoiceLabels,
-				Type:         plugin.FieldTypeEnum,
-				Default:      defaultVoice,
-				Desc:         "MiMo voice (e.g. 茉莉/冰糖/苏打/白桦/Mia/Chloe/Milo/Dean/mimo_default)",
-			},
-			{
-				Name:    "queue_size",
-				Label:   "Playback queue size",
-				Type:    plugin.FieldTypeNumber,
-				Default: 100,
-				Desc:    "Playback queue size",
-			},
-		},
-	})
-}
+func (c *Consumer) SetErrorHandler(handler func(error)) { c.onError = handler }
