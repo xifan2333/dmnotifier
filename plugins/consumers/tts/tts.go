@@ -3,6 +3,7 @@ package tts
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/xifan2333/dmnotifier/internal/plugin"
 	"github.com/xifan2333/dmnotifier/pkg/models"
@@ -33,6 +34,9 @@ type Consumer struct {
 	player   string
 	done     chan struct{}
 	onTiming func(Timing)
+
+	volumeMu sync.RWMutex
+	volume   float64
 }
 
 func New() plugin.Plugin {
@@ -59,6 +63,7 @@ func (c *Consumer) Init(ctx context.Context, config map[string]interface{}) erro
 		_ = c.engine.Close()
 		return err
 	}
+	c.SetVolume(configVolume(config))
 
 	queueSize := 100
 	if size, ok := config["queue_size"].(int); ok && size > 0 {
@@ -150,3 +155,22 @@ func (c *Consumer) formatMessage(msg *models.Message) (prefix, content string) {
 }
 
 func (c *Consumer) SetErrorHandler(handler func(error)) { c.onError = handler }
+
+// SetVolume 运行时更新播放音量（百分比 0-200），跨 provider 生效。
+func (c *Consumer) SetVolume(volume float64) {
+	if volume < 0 {
+		volume = 0
+	}
+	if volume > 200 {
+		volume = 200
+	}
+	c.volumeMu.Lock()
+	c.volume = volume
+	c.volumeMu.Unlock()
+}
+
+func (c *Consumer) volumeValue() float64 {
+	c.volumeMu.RLock()
+	defer c.volumeMu.RUnlock()
+	return c.volume
+}

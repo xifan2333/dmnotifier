@@ -6,9 +6,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	tuimsg "github.com/xifan2333/dmnotifier/internal/common"
+	"github.com/xifan2333/dmnotifier/internal/config"
 	"github.com/xifan2333/dmnotifier/internal/pipeline"
 	"github.com/xifan2333/dmnotifier/internal/subscribe"
-	"github.com/xifan2333/dmnotifier/internal/config"
 	"github.com/xifan2333/dmnotifier/internal/tui/components"
 	"github.com/xifan2333/dmnotifier/pkg/api"
 	"github.com/xifan2333/dmnotifier/pkg/models"
@@ -123,6 +123,11 @@ func (m *Manager) UpdatePluginsConfig(plugins []tuimsg.PluginConfig) {
 // GetConfig 获取配置
 func (m *Manager) GetConfig() *config.AppConfig {
 	return m.config
+}
+
+// SetVolume 广播全局音量到当前 pipeline 的消费者（运行时生效）。
+func (m *Manager) SetVolume(v float64) {
+	m.sub.SetVolume(v)
 }
 
 // ConnectedTargets 当前已连接列表

@@ -75,6 +75,13 @@ func (m *Manager) API() *api.Client {
 	return m.api
 }
 
+// SetVolume 把运行时音量广播到当前 pipeline（未连接时为无操作）。
+func (m *Manager) SetVolume(v float64) {
+	if m.pipeline != nil {
+		m.pipeline.SetVolume(v)
+	}
+}
+
 // ensurePipeline 懒初始化共享 pipeline
 func (m *Manager) ensurePipeline() error {
 	if m.pipeline != nil {

@@ -123,6 +123,11 @@ type StatusMsg struct {
 	Message string
 }
 
+// VolumeChangedMsg 全局播放音量变化（TUI 按键/滚轮触发，运行时生效）
+type VolumeChangedMsg struct {
+	Volume float64
+}
+
 type ErrorMsg struct {
 	Err error
 }

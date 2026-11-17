@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/xifan2333/dmnotifier/internal/plugin"
 	"github.com/xifan2333/dmnotifier/pkg/models"
 )
 
@@ -92,6 +93,17 @@ func (m *Manager) Dispatch(ctx context.Context, msg *models.Message) {
 
 			}
 		}(pipeline)
+	}
+}
+
+// SetVolume 把运行时音量变化广播到所有实现了 VolumeSetter 的消费者。
+func (m *Manager) SetVolume(v float64) {
+	for _, p := range m.GetAllPipelines() {
+		for _, consumer := range p.Consumers() {
+			if setter, ok := consumer.(plugin.VolumeSetter); ok {
+				setter.SetVolume(v)
+			}
+		}
 	}
 }
 

@@ -52,7 +52,7 @@ func Run(opts ...Options) error {
 
 	m := NewRootModel(cfg)
 	wrapped := &businessLogicMiddleware{model: m, config: cfg}
-	p := tea.NewProgram(wrapped, tea.WithAltScreen())
+	p := tea.NewProgram(wrapped, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	wrapped.program = p
 	mgr := business.NewManager(p, cfg)
 	wrapped.mgr = mgr
@@ -132,6 +132,10 @@ func (m *businessLogicMiddleware) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tuimsg.UpdatePluginsConfigMsg:
 		m.mgr.UpdatePluginsConfig(msg.Plugins)
+		m.scheduleSave()
+
+	case tuimsg.VolumeChangedMsg:
+		m.mgr.SetVolume(msg.Volume)
 		m.scheduleSave()
 
 	case tuimsg.ConnectSuccessMsg:

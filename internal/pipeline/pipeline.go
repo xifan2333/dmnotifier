@@ -87,6 +87,13 @@ func (p *Pipeline) AddConsumer(c plugin.ConsumerPlugin) {
 
 }
 
+// Consumers 返回消费者列表副本
+func (p *Pipeline) Consumers() []plugin.ConsumerPlugin {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return append([]plugin.ConsumerPlugin(nil), p.consumers...)
+}
+
 // Process 处理消息
 func (p *Pipeline) Process(ctx context.Context, msg *models.Message) error {
 	p.mu.RLock()

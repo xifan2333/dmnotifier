@@ -3,6 +3,7 @@ package tts
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/xifan2333/dmnotifier/internal/plugin"
@@ -33,7 +34,12 @@ var engines = []engineDefinition{
 		{Name: "edge_voice", Label: "Voice", Type: plugin.FieldTypeEnum, Default: defaultEdgeVoice, Options: edgeVoiceOptions, OptionLabels: edgeVoiceLabels},
 	}},
 }
-var queueField = plugin.ConfigField{Name: "queue_size", Label: "Playback queue size", Type: plugin.FieldTypeNumber, Default: 100}
+var (
+	// Plugin-level fields shared by every TTS provider (like queue_size, volume
+	// survives provider switches and lives in the tts plugin config).
+	queueField  = plugin.ConfigField{Name: "queue_size", Label: "Playback queue size", Type: plugin.FieldTypeNumber, Default: 100}
+	volumeField = plugin.ConfigField{Name: "volume", Label: "Volume", Type: plugin.FieldTypeNumber, Default: 100, Desc: "Playback volume, percent (0-200)"}
+)
 
 func configString(config map[string]interface{}, key, fallback string) string {
 	value, _ := config[key].(string)
@@ -41,6 +47,31 @@ func configString(config map[string]interface{}, key, fallback string) string {
 		return fallback
 	}
 	return strings.TrimSpace(value)
+}
+
+// configVolume parses the playback volume (percent 0-200, default 100) from
+// config values that may arrive as int, int64, float64 or string.
+func configVolume(config map[string]interface{}) float64 {
+	volume := 100.0
+	switch value := config["volume"].(type) {
+	case int:
+		volume = float64(value)
+	case int64:
+		volume = float64(value)
+	case float64:
+		volume = value
+	case string:
+		if parsed, err := strconv.ParseFloat(value, 64); err == nil {
+			volume = parsed
+		}
+	}
+	if volume < 0 {
+		volume = 0
+	}
+	if volume > 200 {
+		volume = 200
+	}
+	return volume
 }
 func findEngine(config map[string]interface{}) (engineDefinition, error) {
 	id := strings.ToLower(configString(config, "provider", defaultProvider))
@@ -64,7 +95,7 @@ func configFields(config map[string]interface{}) []plugin.ConfigField {
 	if definition, err := findEngine(config); err == nil {
 		fields = append(fields, definition.fields...)
 	}
-	return append(fields, queueField)
+	return append(fields, queueField, volumeField)
 }
 func configTemplate() []plugin.ConfigField {
 	fields := []plugin.ConfigField{providerField()}
@@ -72,7 +103,7 @@ func configTemplate() []plugin.ConfigField {
 		fields = append(fields, e.fields...)
 		fields = append(fields, e.defaults...)
 	}
-	return append(fields, queueField)
+	return append(fields, queueField, volumeField)
 }
 func init() {
 	plugin.Register("tts", New, plugin.PluginInfo{Name: "tts", Type: plugin.TypeConsumer, ConfigTemplate: configTemplate(), ConfigFields: configFields})

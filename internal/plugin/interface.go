@@ -84,6 +84,12 @@ type ErrorHandlerSetter interface {
 	SetErrorHandler(func(error))
 }
 
+// VolumeSetter is implemented by plugins that accept runtime playback volume
+// changes (e.g. TTS). Value is percent, clamped by the consumer.
+type VolumeSetter interface {
+	SetVolume(float64)
+}
+
 // BasePlugin 插件基础实现（可选继承）
 type BasePlugin struct {
 	name   string

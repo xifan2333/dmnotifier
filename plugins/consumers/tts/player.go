@@ -27,9 +27,9 @@ func (c *Consumer) checkPlayer() error {
 	return fmt.Errorf("no audio player found: install mpv or ffplay")
 }
 
-func playerArgs(player string, format audioFormat) []string {
+func playerArgs(player string, format audioFormat, volume float64) []string {
 	if player == "mpv" {
-		args := []string{"--no-config", "--really-quiet", "--no-terminal", "--no-video", "--cache=no", "--audio-buffer=0.1", "--stream-buffer-size=4096", "--demuxer-lavf-buffersize=1024", "--demuxer-lavf-probe-info=no"}
+		args := []string{"--no-config", "--really-quiet", "--no-terminal", "--no-video", "--cache=no", "--audio-buffer=0.1", "--stream-buffer-size=4096", "--demuxer-lavf-buffersize=1024", "--demuxer-lavf-probe-info=no", fmt.Sprintf("--volume=%.0f", volume)}
 		if format == pcm16 {
 			args = append(args, "--demuxer-lavf-format=s16le", "--demuxer-lavf-o=sample_rate=24000,ch_layout=mono")
 		} else {
@@ -37,7 +37,11 @@ func playerArgs(player string, format audioFormat) []string {
 		}
 		return append(args, "-")
 	}
-	args := []string{"-hide_banner", "-loglevel", "error", "-nodisp", "-autoexit", "-probesize", "32", "-analyzeduration", "0"}
+	vol := volume
+	if vol > 100 {
+		vol = 100 // ffplay -volume is clamped to 0-100
+	}
+	args := []string{"-hide_banner", "-loglevel", "error", "-nodisp", "-autoexit", "-probesize", "32", "-analyzeduration", "0", "-volume", fmt.Sprintf("%.0f", vol)}
 	if format == pcm16 {
 		args = append(args, "-f", "s16le", "-ar", "24000", "-ch_layout", "mono")
 	} else {
@@ -57,7 +61,7 @@ func (c *Consumer) playMessage(item *audioItem) error {
 	if c.player == "afplay" {
 		return c.playFile(ctx, stream)
 	}
-	cmd := exec.CommandContext(ctx, c.player, playerArgs(c.player, stream.Format)...)
+	cmd := exec.CommandContext(ctx, c.player, playerArgs(c.player, stream.Format, c.volumeValue())...)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return err
@@ -87,7 +91,8 @@ func (c *Consumer) playMessage(item *audioItem) error {
 	return nil
 }
 
-// afplay requires a seekable file. Only this explicit macOS fallback waits for
+// afplay requires a seekable file and has no volume flag; the configured
+// volume only affects mpv/ffplay. Only this explicit macOS fallback waits for
 // all audio; raw MiMo PCM is wrapped in a proper WAV header after streaming.
 func (c *Consumer) playFile(ctx context.Context, stream AudioStream) error {
 	ext := ".mp3"

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -76,6 +77,18 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+
+	case tea.MouseMsg:
+		// 滚轮在主界面调节全局音量；弹窗打开时忽略。
+		if m.servicesPopup.IsVisible() || m.serverConfig.IsVisible() || m.addService.IsVisible() || m.pluginsConfig.IsVisible() {
+			return m, nil
+		}
+		switch msg.Type {
+		case tea.MouseWheelUp:
+			return m.adjustVolume(volumeStep)
+		case tea.MouseWheelDown:
+			return m.adjustVolume(-volumeStep)
+		}
 
 	case tea.KeyMsg:
 		// 如果有弹窗显示，优先处理弹窗按键
@@ -181,6 +194,12 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return tuimsg.DisconnectServiceRequestMsg{}
 				}
 			}
+
+		case "+", "=":
+			return m.adjustVolume(volumeStep)
+
+		case "-":
+			return m.adjustVolume(-volumeStep)
 		}
 
 	case tuimsg.StatusMsg:
@@ -301,7 +320,7 @@ func (m RootModel) View() string {
 	status := statusStyle.Width(m.width).Render(m.statusMessage)
 
 	// 帮助栏
-	help := helpStyle.Width(m.width).Render("a:Add | s:Services | c:Config | p:Plugins | r:Refresh | d:DisconnectAll | q:Quit")
+	help := helpStyle.Width(m.width).Render("a:Add | s:Services | c:Config | p:Plugins | r:Refresh | d:DisconnectAll | +/-:Volume | q:Quit")
 
 	mainView := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -367,6 +386,65 @@ func (m RootModel) View() string {
 // GetConfig 获取配置
 func (m RootModel) GetConfig() *AppConfig {
 	return m.config
+}
+
+// volumeStep 每档/每格的音量步进（百分比）。
+const volumeStep = 5
+
+// ttsVolumeIndex 定位 tts 插件配置下标；-1 表示插件不存在。
+func (m RootModel) ttsVolumeIndex() int {
+	for i, pluginCfg := range m.config.Pipeline.Plugins {
+		if pluginCfg.Name == "tts" {
+			return i
+		}
+	}
+	return -1
+}
+
+// ttsCurrentVolume 读取 tts 插件配置中的音量（缺失按默认 100）。
+func (m RootModel) ttsCurrentVolume(index int) float64 {
+	if index < 0 {
+		return 100
+	}
+	value, ok := m.config.Pipeline.Plugins[index].Config["volume"]
+	if !ok {
+		return 100
+	}
+	switch v := value.(type) {
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case float64:
+		return v
+	case string:
+		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
+			return parsed
+		}
+	}
+	return 100
+}
+
+// adjustVolume 调整 tts 插件音量并通知运行时生效（键/滚轮驱动，实时生效并保存）。
+func (m RootModel) adjustVolume(delta float64) (tea.Model, tea.Cmd) {
+	index := m.ttsVolumeIndex()
+	v := m.ttsCurrentVolume(index) + delta
+	if v < 0 {
+		v = 0
+	}
+	if v > 200 {
+		v = 200
+	}
+	if index >= 0 {
+		if m.config.Pipeline.Plugins[index].Config == nil {
+			m.config.Pipeline.Plugins[index].Config = map[string]interface{}{}
+		}
+		m.config.Pipeline.Plugins[index].Config["volume"] = int(v)
+	}
+	m.statusMessage = fmt.Sprintf("Volume: %.0f%%", v)
+	return m, func() tea.Msg {
+		return tuimsg.VolumeChangedMsg{Volume: v}
+	}
 }
 
 func appendUnique(ss []string, s string) []string {
